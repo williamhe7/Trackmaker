@@ -20,7 +20,7 @@ async function initONNX() {
         updateStatus('✅ Model ready');
     } catch (e) {
         console.error(e);
-        updateStatus('❌ Model failed to load');
+        updateStatus('❌ Model load failed');
     }
 }
 
@@ -49,7 +49,7 @@ function setupUI() {
     document.getElementById('btnStart').onclick = startPlayback;
 }
 
-function enableControlsAfterCalibration() {
+function enableAfterCalibration() {
     isCalibrated = true;
     document.getElementById('btnMIDI').disabled = false;
     document.getElementById('btnStart').disabled = false;
@@ -67,40 +67,35 @@ async function startWebcam() {
         video = document.createElement('video');
         video.srcObject = stream;
         video.playsInline = true;
+        video.muted = true;
         await video.play();
 
-        // Set canvas to full window size
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+        // Set canvas size once
+        canvas.width = Math.max(window.innerWidth, 640);
+        canvas.height = Math.max(window.innerHeight - 160, 400); // safe height
 
         isRunning = true;
         document.getElementById('btnCalibrate').disabled = false;
-        updateStatus('Camera active — point at piano and tap Recalibrate');
+        updateStatus('Camera active — Point at piano → Recalibrate');
         loop();
     } catch (e) {
-        updateStatus('Camera access failed');
+        updateStatus('Camera failed: ' + e.message);
         console.error(e);
     }
 }
 
-function resizeCanvas() {
-    if (!canvas) return;
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - 140; // approx space for header + controls
-}
-
 async function calibrate() {
     if (!video || !session) return;
-    updateStatus('Detecting piano keys...');
+    updateStatus('Detecting keys...');
     
     const kps = await keypointManager.getKeypoints(video, session);
     if (kps?.length >= 2) {
         keypointManager.computeHomography(kps);
         pianoManager.initKeys();
-        enableControlsAfterCalibration();
-        updateStatus(`✅ Calibrated with ${kps.length} key groups`);
+        enableAfterCalibration();
+        updateStatus(`✅ Calibrated (${kps.length} groups)`);
     } else {
-        updateStatus('⚠️ Not enough keys. Try better angle/lighting.');
+        updateStatus('⚠️ Not enough keys detected. Try better lighting/angle.');
     }
 }
 
@@ -126,30 +121,31 @@ function startPlayback() {
 }
 
 function loop() {
-    if (!isRunning || !video) return;
-
-    // === FULL SCREEN WITH ASPECT RATIO PRESERVED ===
-    const videoRatio = video.videoWidth / video.videoHeight;
-    const canvasRatio = canvas.width / canvas.height;
-
-    let drawWidth = canvas.width;
-    let drawHeight = canvas.height;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    if (canvasRatio > videoRatio) {
-        // Pillarbox (vertical bars)
-        drawWidth = canvas.height * videoRatio;
-        offsetX = (canvas.width - drawWidth) / 2;
-    } else {
-        // Letterbox (horizontal bars)
-        drawHeight = canvas.width / videoRatio;
-        offsetY = (canvas.height - drawHeight) / 2;
+    if (!isRunning || !video) {
+        requestAnimationFrame(loop);
+        return;
     }
 
+    // Draw video safely
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(video, offsetX, offsetY, drawWidth, drawHeight);
+    
+    const vW = video.videoWidth;
+    const vH = video.videoHeight;
+    if (vW && vH) {
+        const ratio = vW / vH;
+        let drawW = canvas.width;
+        let drawH = drawW / ratio;
+        let offsetY = (canvas.height - drawH) / 2;
+
+        if (drawH > canvas.height) {
+            drawH = canvas.height;
+            drawW = drawH * ratio;
+            offsetY = 0;
+        }
+
+        ctx.drawImage(video, (canvas.width - drawW)/2, offsetY, drawW, drawH);
+    }
 
     if (started && midiManager.notes.length > 0) {
         const currentTime = performance.now() / 1000;
