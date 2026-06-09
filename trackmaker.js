@@ -13,14 +13,18 @@ let started = false;
 let isCalibrated = false;
 
 async function initONNX() {
+    updateStatus('Loading AI model (this may take 10-30s on mobile)...');
     try {
         session = await ort.InferenceSession.create('best_v3.onnx', {
-            executionProviders: ['wasm', 'webgl']
+            executionProviders: ['wasm'],   // Force WASM for better mobile stability
+            graphOptimizationLevel: 'basic'
         });
-        updateStatus('✅ Model ready');
+        updateStatus('✅ Model loaded successfully');
+        return true;
     } catch (e) {
-        console.error('ONNX Error:', e);
-        updateStatus('❌ Model load failed');
+        console.error('ONNX Load Error:', e);
+        updateStatus('❌ Model failed to load. Try on desktop or refresh.');
+        return false;
     }
 }
 
@@ -28,14 +32,16 @@ export async function initTrackmaker() {
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
     
-    await initONNX();
+    const success = await initONNX();
     
     keypointManager = new KeypointManager();
     pianoManager = new PianoManager(keypointManager);
     midiManager = new MidiManager(pianoManager, 180);
 
     setupUI();
-    updateStatus('Tap "Start Camera"');
+    if (success) {
+        updateStatus('✅ Ready — Tap "Start Camera"');
+    }
 }
 
 function updateStatus(msg) {
@@ -56,14 +62,11 @@ async function startWebcam() {
     if (btn) btn.disabled = true;
     
     try {
-        updateStatus('Requesting selfie camera...');
+        updateStatus('Requesting Selfie Camera...');
 
-        // Strong preference for front/selfie camera
         stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
-                facingMode: { 
-                    exact: "user"      // Forces front/selfie camera
-                },
+                facingMode: { exact: "user" },
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
             } 
@@ -73,7 +76,6 @@ async function startWebcam() {
         video.srcObject = stream;
         video.playsInline = true;
         video.muted = true;
-        
         await video.play();
 
         resizeCanvas();
@@ -81,22 +83,11 @@ async function startWebcam() {
 
         isRunning = true;
         document.getElementById('btnCalibrate').disabled = false;
-        updateStatus('✅ Selfie Camera Active — Point at piano & tap Recalibrate');
+        updateStatus('✅ Selfie Camera Active — Point at piano and tap Recalibrate');
         loop();
     } catch (e) {
         console.error('Camera Error:', e);
-        
-        // Fallback without "exact"
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "user" }
-            });
-            // ... (reuse video creation code)
-            updateStatus('Selfie camera (fallback)');
-            // Repeat the video setup here if needed
-        } catch (fallbackErr) {
-            updateStatus('❌ Could not access selfie camera');
-        }
+        updateStatus('❌ Camera error: ' + e.message);
         if (btn) btn.disabled = false;
     }
 }
@@ -104,8 +95,9 @@ async function startWebcam() {
 function resizeCanvas() {
     if (!canvas) return;
     canvas.width = window.innerWidth;
-    const topBarHeight = document.getElementById('top-bar')?.offsetHeight || 140;
-    canvas.height = window.innerHeight - topBarHeight - 10;
+    const topBar = document.getElementById('top-bar');
+    const topHeight = topBar ? topBar.offsetHeight : 140;
+    canvas.height = window.innerHeight - topHeight - 10;
 }
 
 async function calibrate() {
@@ -113,26 +105,27 @@ async function calibrate() {
         updateStatus('Camera or model not ready');
         return;
     }
-    updateStatus('Detecting keys...');
+    updateStatus('Detecting piano keys...');
     
     try {
         const kps = await keypointManager.getKeypoints(video, session);
-        if (kps?.length >= 2) {
+        if (kps && kps.length >= 2) {
             keypointManager.computeHomography(kps);
             pianoManager.initKeys();
             isCalibrated = true;
             document.getElementById('btnMIDI').disabled = false;
             document.getElementById('btnStart').disabled = false;
-            updateStatus(`✅ Calibrated (${kps.length} groups)`);
+            updateStatus(`✅ Calibrated with ${kps.length} key groups`);
         } else {
-            updateStatus('⚠️ Not enough keys detected');
+            updateStatus('⚠️ Not enough keys detected. Try better lighting.');
         }
     } catch (e) {
         console.error(e);
-        updateStatus('Detection error');
+        updateStatus('Detection failed — check console');
     }
 }
 
+// Other functions (selectMIDI, startPlayback, toggleFullscreen, loop) remain the same as previous version
 function selectMIDI() {
     if (!isCalibrated) return;
     const input = document.createElement('input');
@@ -157,7 +150,7 @@ function startPlayback() {
 function toggleFullscreen() {
     const container = document.getElementById('canvas-container');
     if (!document.fullscreenElement) {
-        container.requestFullscreen();
+        container.requestFullscreen().catch(() => {});
     } else {
         document.exitFullscreen();
     }
@@ -184,4 +177,18 @@ function loop() {
 
     if (drawH > canvas.height) {
         drawH = canvas.height;
-       
+        drawW = drawH * ratio;
+    }
+
+    ctx.drawImage(video, (canvas.width - drawW)/2, offsetY, drawW, drawH);
+
+    if (started && midiManager.notes.length > 0) {
+        const currentTime = performance.now() / 1000;
+        midiManager.drawVisualization(ctx, canvas.height, currentTime - midiManager.startTime);
+    }
+    ctx.restore();
+
+    requestAnimationFrame(loop);
+}
+
+window.onload = initTrackmaker;
