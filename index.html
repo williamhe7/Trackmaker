@@ -24,11 +24,16 @@
             display:flex; gap:8px; justify-content:center; flex-wrap:wrap; padding:8px;
         }
         button {
-            padding:12px 20px; font-size:16px; background:#0a0; color:white;
-            border:none; border-radius:8px; cursor:pointer; min-width:130px;
+            padding:12px 18px; font-size:15px; background:#0a0; color:white;
+            border:none; border-radius:8px; cursor:pointer; min-width:125px;
         }
         button:hover:not(:disabled) { background:#0c0; }
-        button:disabled { background:#444; color:#aaa; }
+        button:disabled { 
+            background:#333; 
+            color:#888; 
+            cursor:not-allowed; 
+            opacity: 0.7;
+        }
 
         #canvas-container {
             flex: 1; position:relative; background:#111; overflow:hidden;
@@ -45,6 +50,7 @@
         #fullscreen-btn {
             position:absolute; top:12px; right:12px; z-index:220;
             padding:8px 14px; font-size:14px; background:rgba(0,0,0,0.7);
+            color:white; border:none; border-radius:6px;
         }
     </style>
 </head>
@@ -53,4 +59,23 @@
         <div id="header">Piano Trackmaker</div>
         <div class="controls">
             <button id="btnWebcam">Start Camera</button>
+            <button id="btnCalibrate" disabled>Recalibrate</button>
             <button id="btnMIDI" disabled>Select MIDI</button>
+            <button id="btnStart" disabled>Start Playback</button>
+        </div>
+    </div>
+   
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+        <div id="status">Loading...</div>
+        <button id="fullscreen-btn">⛶ Fullscreen</button>
+    </div>
+
+    <script type="module">
+        import './keypointManager.js';
+        import './pianoManager.js';
+        import './midiManager.js';
+        import './trackmaker.js';
+    </script>
+</body>
+</html>
