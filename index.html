@@ -14,33 +14,55 @@
         body {
             background:#000; color:#fff; font-family:Arial, sans-serif;
             height:100vh; overflow:hidden; display:flex; flex-direction:column;
-            touch-action: manipulation;
         }
         #header, .controls {
-            background:rgba(20,20,20,0.85); z-index: 100; 
+            background:rgba(20,20,20,0.9); z-index: 200; 
             backdrop-filter: blur(8px);
         }
-        #header { padding:8px; text-align:center; }
+        #header { padding:10px; text-align:center; font-size:18px; }
         .controls {
-            padding:8px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;
+            padding:10px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
         }
         button {
-            padding:11px 18px; font-size:15px; background:#0a0; color:white;
-            border:none; border-radius:6px; cursor:pointer; min-width:120px;
+            padding:12px 20px; font-size:16px; background:#0a0; color:white;
+            border:none; border-radius:8px; cursor:pointer; min-width:130px;
         }
-        button:hover { background:#0c0; }
-        button:disabled { background:#444; color:#888; cursor:not-allowed; }
+        button:hover:not(:disabled) { background:#0c0; }
+        button:disabled { background:#444; color:#aaa; }
 
         #canvas-container {
-            flex:1; position:relative; background:#000; overflow:hidden;
+            flex:1; position:relative; background:#111; overflow:hidden;
         }
         #canvas {
             position:absolute; top:0; left:0; width:100%; height:100%;
             image-rendering: crisp-edges;
         }
         #status {
-            position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
-            background:rgba(0,0,0,0.75); padding:6px 16px; border-radius:20px;
-            font-size:14px; z-index:110; white-space:nowrap; pointer-events:none;
+            position:absolute; bottom:15px; left:50%; transform:translateX(-50%);
+            background:rgba(0,0,0,0.8); padding:8px 18px; border-radius:25px;
+            font-size:15px; z-index:210; white-space:nowrap; pointer-events:none;
         }
-    </
+    </style>
+</head>
+<body>
+    <div id="header">Piano Trackmaker</div>
+    <div class="controls">
+        <button id="btnWebcam">Start Camera</button>
+        <button id="btnMIDI" disabled>Select MIDI</button>
+        <button id="btnCalibrate" disabled>Recalibrate</button>
+        <button id="btnStart" disabled>Start Playback</button>
+    </div>
+    
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+        <div id="status">Loading...</div>
+    </div>
+
+    <script type="module">
+        import './keypointManager.js';
+        import './pianoManager.js';
+        import './midiManager.js';
+        import './trackmaker.js';
+    </script>
+</body>
+</html>
