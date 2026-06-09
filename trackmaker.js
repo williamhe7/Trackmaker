@@ -59,7 +59,7 @@ async function startWebcam() {
     try {
         stream = await navigator.mediaDevices.getUserMedia({ 
             video: { 
-                facingMode: "environment",
+                facingMode: "user",           // ← Changed to FRONT camera for mobile
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
             } 
@@ -70,18 +70,25 @@ async function startWebcam() {
         video.muted = true;
         await video.play();
 
-        // Set canvas size once
-        canvas.width = Math.max(window.innerWidth, 640);
-        canvas.height = Math.max(window.innerHeight - 160, 400); // safe height
+        // Make canvas fill the remaining space
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
         isRunning = true;
         document.getElementById('btnCalibrate').disabled = false;
-        updateStatus('Camera active — Point at piano → Recalibrate');
+        updateStatus('Camera active (front) — Point at piano and tap Recalibrate');
         loop();
     } catch (e) {
         updateStatus('Camera failed: ' + e.message);
         console.error(e);
     }
+}
+
+function resizeCanvas() {
+    if (!canvas || !video) return;
+    canvas.width = window.innerWidth;
+    // Use almost full remaining height
+    canvas.height = window.innerHeight - document.getElementById('top-bar').offsetHeight - 20;
 }
 
 async function calibrate() {
@@ -95,7 +102,7 @@ async function calibrate() {
         enableAfterCalibration();
         updateStatus(`✅ Calibrated (${kps.length} groups)`);
     } else {
-        updateStatus('⚠️ Not enough keys detected. Try better lighting/angle.');
+        updateStatus('⚠️ Not enough keys. Better lighting/angle needed.');
     }
 }
 
@@ -126,7 +133,6 @@ function loop() {
         return;
     }
 
-    // Draw video safely
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
@@ -141,7 +147,6 @@ function loop() {
         if (drawH > canvas.height) {
             drawH = canvas.height;
             drawW = drawH * ratio;
-            offsetY = 0;
         }
 
         ctx.drawImage(video, (canvas.width - drawW)/2, offsetY, drawW, drawH);
