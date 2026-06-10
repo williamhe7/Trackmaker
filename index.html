@@ -16,7 +16,7 @@
             height:100vh; overflow:hidden; display:flex; flex-direction:column;
         }
         #top-bar {
-            background:rgba(20,20,20,0.95); z-index: 9999;
+            background:rgba(20,20,20,0.95); z-index: 200;
             padding:8px 10px;
         }
         #header { text-align:center; font-size:18px; padding:6px; }
@@ -28,7 +28,12 @@
             border:none; border-radius:8px; cursor:pointer; min-width:125px;
         }
         button:hover:not(:disabled) { background:#0c0; }
-        button:disabled { background:#333; color:#888; cursor:not-allowed; }
+        button:disabled { 
+            background:#333; 
+            color:#888; 
+            cursor:not-allowed; 
+            opacity: 0.7;
+        }
 
         #canvas-container {
             flex: 1; position:relative; background:#111; overflow:hidden;
@@ -40,11 +45,11 @@
         #status {
             position:absolute; bottom:12px; left:50%; transform:translateX(-50%);
             background:rgba(0,0,0,0.8); padding:8px 18px; border-radius:25px;
-            font-size:15px; z-index:9999; white-space:nowrap;
+            font-size:15px; z-index:210; white-space:nowrap; pointer-events:none;
         }
         #fullscreen-btn {
-            position:absolute; top:12px; right:12px; z-index:9999;
-            padding:10px 16px; font-size:15px; background:rgba(0,0,0,0.8);
+            position:absolute; top:12px; right:12px; z-index:220;
+            padding:8px 14px; font-size:14px; background:rgba(0,0,0,0.7);
             color:white; border:none; border-radius:6px;
         }
     </style>
