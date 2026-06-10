@@ -1,4 +1,3 @@
-// trackmaker.js
 import { KeypointManager } from './keypointManager.js';
 import { PianoManager } from './pianoManager.js';
 import { MidiManager } from './midiManager.js';
@@ -6,7 +5,6 @@ import { MidiManager } from './midiManager.js';
 let session = null;
 let video = null;
 let stream = null;
-
 let canvas, ctx;
 
 let keypointManager, pianoManager, midiManager;
@@ -16,31 +14,62 @@ let started = false;
 let isCalibrated = false;
 
 let loopStarted = false;
-let frameCount = 0;
 
-const MODEL_URL = "https://williamhe7.github.io/trackmaker/best_v3.onnx";
+const MODEL_URL = 'https://williamhe7.github.io/trackmaker/best_v3.onnx';
 
+// --------------------
+// INIT ONNX
+// --------------------
 async function initONNX() {
+    updateStatus('Loading AI model...');
+
     try {
         session = await ort.InferenceSession.create(MODEL_URL, {
-            executionProviders: ["wasm"],
-            graphOptimizationLevel: "basic"
+            executionProviders: ['wasm'],
+            graphOptimizationLevel: 'basic'
         });
 
-        updateStatus("Model loaded");
+        updateStatus('Model loaded');
         return true;
     } catch (e) {
         console.error(e);
-        updateStatus("Model failed");
+        updateStatus('Model failed to load');
         return false;
     }
 }
 
-export async function initTrackmaker() {
-    canvas = document.getElementById("canvas");
-    ctx = canvas.getContext("2d");
+// --------------------
+// SAFE CV WAIT (IMPORTANT FIX)
+// --------------------
+function waitForCV() {
+    return new Promise(resolve => {
+        const check = () => {
+            if (window.cv && cv.Mat) {
+                resolve();
+            } else {
+                setTimeout(check, 50);
+            }
+        };
+        check();
+    });
+}
 
-    await initONNX();
+// --------------------
+// INIT APP
+// --------------------
+export async function initTrackmaker() {
+
+    canvas = document.getElementById('canvas');
+    ctx = canvas.getContext('2d');
+
+    if (!canvas || !ctx) {
+        console.error("Canvas not found");
+        return;
+    }
+
+    await waitForCV(); // 🔥 CRITICAL FIX
+
+    const modelLoaded = await initONNX();
 
     keypointManager = new KeypointManager();
     pianoManager = new PianoManager(keypointManager);
@@ -48,74 +77,164 @@ export async function initTrackmaker() {
 
     setupUI();
 
-    waitForCV();
+    updateStatus(modelLoaded
+        ? 'Ready — Start Camera'
+        : 'Model failed'
+    );
 }
 
-function waitForCV() {
-    if (typeof cv !== "undefined") return;
-    setTimeout(waitForCV, 100);
-}
-
-function updateStatus(msg) {
-    const el = document.getElementById("status");
-    if (el) el.textContent = msg;
-}
-
+// --------------------
+// UI SAFE BINDING
+// --------------------
 function setupUI() {
-    document.getElementById("btnWebcam").onclick = startWebcam;
-    document.getElementById("btnCalibrate").onclick = calibrate;
-    document.getElementById("btnMIDI").onclick = selectMIDI;
-    document.getElementById("btnStart").onclick = startPlayback;
+    const btnCam = document.getElementById('btnWebcam');
+    const btnCal = document.getElementById('btnCalibrate');
+    const btnMidi = document.getElementById('btnMIDI');
+    const btnStart = document.getElementById('btnStart');
+
+    if (!btnCam) {
+        console.error("UI buttons not found");
+        return;
+    }
+
+    btnCam.onclick = startWebcam;
+    btnCal.onclick = calibrate;
+    btnMidi.onclick = selectMIDI;
+    btnStart.onclick = startPlayback;
 }
 
+// --------------------
+// CAMERA
+// --------------------
 async function startWebcam() {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const btn = document.getElementById('btnWebcam');
+    if (btn) btn.disabled = true;
 
-    video = document.createElement("video");
-    video.srcObject = stream;
-    video.playsInline = true;
-    video.muted = true;
+    try {
+        updateStatus('Starting camera...');
 
-    await video.play();
-    await new Promise(r => video.onloadedmetadata = r);
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+                facingMode: "user",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            }
+        });
 
-    resizeCanvas();
+        video = document.createElement('video');
+        video.srcObject = stream;
+        video.playsInline = true;
+        video.muted = true;
 
-    isRunning = true;
+        await video.play();
 
-    if (!loopStarted) {
-        loopStarted = true;
-        loop();
+        resizeCanvas();
+
+        if (!loopStarted) {
+            loopStarted = true;
+            loop();
+        }
+
+        isRunning = true;
+
+        updateStatus('Camera ready');
+
+    } catch (e) {
+        console.error(e);
+        updateStatus('Camera failed');
+        if (btn) btn.disabled = false;
     }
 }
 
+// --------------------
+// RESIZE
+// --------------------
 function resizeCanvas() {
-    const top = document.getElementById("top-bar");
-    const h = top ? top.offsetHeight : 0;
-
+    if (!canvas) return;
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight - h;
+    canvas.height = window.innerHeight;
 }
 
+// --------------------
+// CALIBRATE
+// --------------------
 async function calibrate() {
-    const kps = await keypointManager.get_kpps(video, session);
+    if (!video || !session) {
+        updateStatus('Not ready');
+        return;
+    }
 
-    if (kps.length < 2) return;
+    updateStatus('Calibrating...');
 
-    keypointManager.compute_homography(kps, keypointManager.h);
-    pianoManager.initKeys();
+    try {
+        const kps = await keypointManager.get_kpps(video, session);
 
-    isCalibrated = true;
+        if (!kps || kps.length < 2) {
+            updateStatus('Not enough keys');
+            return;
+        }
+
+        keypointManager.compute_homography(kps, keypointManager.h);
+        pianoManager.initKeys();
+
+        isCalibrated = true;
+
+        updateStatus(`Calibrated: ${kps.length} groups`);
+
+    } catch (e) {
+        console.error(e);
+        updateStatus('Calibration failed');
+    }
 }
 
+// --------------------
+// LOOP (SAFE)
+// --------------------
+function loop() {
+
+    if (!loopStarted) return;
+
+    requestAnimationFrame(loop);
+
+    if (!isRunning || !video) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    let frame = null;
+
+    try {
+        if (isCalibrated) {
+            frame = keypointManager.transformImage(video);
+        }
+
+        if (frame) {
+            const x = (canvas.width - frame.width) / 2;
+            const y = canvas.height - frame.height;
+            ctx.drawImage(frame, x, y);
+        } else {
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
+
+        if (started && midiManager.notes.length) {
+            const t = performance.now() / 1000;
+            midiManager.drawVisualization(ctx, canvas.height, t - midiManager.startTime);
+        }
+
+    } catch (e) {
+        console.error("loop error:", e);
+    }
+}
+
+// --------------------
 function selectMIDI() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".mid,.midi";
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.mid,.midi';
 
     input.onchange = async e => {
         if (e.target.files[0]) {
             await midiManager.loadMIDI(e.target.files[0]);
+            updateStatus('MIDI loaded');
         }
     };
 
@@ -127,38 +246,9 @@ function startPlayback() {
     midiManager.startTime = performance.now() / 1000;
 }
 
-function loop() {
-    frameCount++;
-
-    if (!isRunning) {
-        requestAnimationFrame(loop);
-        return;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    let pianoCanvas = null;
-
-    if (isCalibrated && frameCount % 2 === 0) {
-        pianoCanvas = keypointManager.transformImage(video);
-    }
-
-    if (pianoCanvas) {
-        ctx.drawImage(
-            pianoCanvas,
-            (canvas.width - pianoCanvas.width) / 2,
-            canvas.height - pianoCanvas.height
-        );
-    } else {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    }
-
-    if (started && midiManager.notes.length > 0) {
-        const t = performance.now() / 1000;
-        midiManager.drawVisualization(ctx, canvas.height, t - midiManager.startTime);
-    }
-
-    requestAnimationFrame(loop);
+function updateStatus(msg) {
+    const el = document.getElementById('status');
+    if (el) el.textContent = msg;
 }
 
 window.onload = initTrackmaker;
