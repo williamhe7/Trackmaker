@@ -8,8 +8,8 @@ export class KeypointManager {
         this.homography = [];
         this.source = [];
         this.scale_factor = 1;
-        this.scaled_width = 800;
-        this.scaled_height = 300;
+        this.scaled_width = 1000;
+        this.scaled_height = 800;
     }
 
     async getKeypoints(videoElement, session) {
@@ -27,41 +27,64 @@ export class KeypointManager {
 
         for (let i = 0; i < inputSize * inputSize; i++) {
             const idx = i * 4;
-            data[i] = imageData.data[idx] / 255.0;           // R
-            data[i + inputSize * inputSize] = imageData.data[idx + 1] / 255.0; // G
-            data[i + 2 * inputSize * inputSize] = imageData.data[idx + 2] / 255.0; // B
+            data[i] = imageData.data[idx] / 255.0;
+            data[i + inputSize * inputSize] = imageData.data[idx + 1] / 255.0;
+            data[i + 2 * inputSize * inputSize] = imageData.data[idx + 2] / 255.0;
         }
 
         const tensor = new ort.Tensor('float32', data, [1, 3, inputSize, inputSize]);
-        const results = await session.run({ images: tensor });
-        const output = results.output0.data; // [1, 300, 12] -> flattened
+        const results = await session.run({ images: tensor });   // or 'input.1' if needed
 
-        return this.postProcessYOLOPose(output, inputSize);
+        console.log("Raw ONNX output keys:", Object.keys(results));
+        const outputTensor = results.output0 || results.output || Object.values(results)[0];
+        const rawOutput = outputTensor.data;
+
+        return this.postProcessYOLOPose(rawOutput, inputSize);
     }
 
     postProcessYOLOPose(rawOutput, imgSize = 1600) {
-        const numDets = 300;
-        const featDim = 12;
+        // Typical YOLO Pose output shape without NMS: [1, (5 + nKeypoints*3), nAnchors]
+        // Example: 5 (box+conf+cls) + 6 keypoints * 3 (x,y,conf) = 23 values
+        const numAnchors = 8400; // common for 1600px input
+        const valuesPerAnchor = Math.floor(rawOutput.length / numAnchors); 
+
+        console.log(`Pose output format: ${rawOutput.length} values → ${valuesPerAnchor} per anchor`);
+
         const detections = [];
+        const confThreshold = 0.25;
 
-        for (let i = 0; i < numDets; i++) {
-            const offset = i * featDim;
-            const conf = rawOutput[offset + 4];
-            if (conf < 0.25) continue;
+        for (let i = 0; i < numAnchors; i++) {
+            const offset = i * valuesPerAnchor;
+            const confidence = rawOutput[offset + 4]; // usually objectness/confidence
 
-            // Assuming format: [x_center?, y?, ... , conf, cls, kpt_x1, kpt_y1, kpt_x2, kpt_y2, ...]
+            if (confidence < confThreshold) continue;
+
+            // Extract keypoints (after bbox + conf + class)
             const kpts = [];
-            for (let k = 6; k < featDim; k += 2) {  // start after bbox+conf+cls
-                const x = rawOutput[offset + k];
-                const y = rawOutput[offset + k + 1];
-                if (x > 0 && y > 0) kpts.push([x, y]);
+            const kptStart = 5; // adjust if needed (bbox=4 + obj + cls)
+
+            for (let k = 0; k < 6; k++) {  // assuming 6 keypoints (adjust to your model)
+                const xIdx = kptStart + k * 3;
+                const yIdx = xIdx + 1;
+                const visIdx = yIdx + 1;
+
+                const x = rawOutput[offset + xIdx] * imgSize;
+                const y = rawOutput[offset + yIdx] * imgSize;
+                const vis = rawOutput[offset + visIdx];
+
+                if (vis > 0.5) {
+                    kpts.push([x, y]);
+                }
             }
 
-            if (kpts.length >= 2) detections.push(kpts);
+            if (kpts.length >= 2) {
+                detections.push(kpts);
+            }
         }
 
-        // Sort by lowest x (as in Python)
-        return this.sortByLowestX(detections);
+        const sorted = this.sortByLowestX(detections);
+        console.log(`Found ${sorted.length} keypoint groups`);
+        return sorted;
     }
 
     sortByLowestX(kpps) {
@@ -72,6 +95,7 @@ export class KeypointManager {
         });
     }
 
+    // ... rest of the class (computeHomography, transformImage) stays the same as before
     computeHomography(keys, targetH = 1200) {
         this.homography = [];
         this.source = [];
@@ -83,8 +107,8 @@ export class KeypointManager {
             const group1 = keys[i];
             const group2 = keys[i + 1];
 
-            const lt = group1[0];  // left top
-            const lb = group1[1];  // left bottom
+            const lt = group1[0];
+            const lb = group1[1];
             const rt = group2[0];
             const rb = group2[1];
 
@@ -92,9 +116,9 @@ export class KeypointManager {
                 lt[0], lt[1], rt[0], rt[1], rb[0], rb[1], lb[0], lb[1]
             ]);
 
-            const dstWidth = 800; // adjustable
+            const dstWidth = 800;
             const dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-                0, 0, dstWidth - 1, 0, dstWidth - 1, targetH - 1, 0, targetH - 1
+                0, 0, dstWidth-1, 0, dstWidth-1, targetH-1, 0, targetH-1
             ]);
 
             const H = cv.getPerspectiveTransform(srcPoints, dstPoints);
