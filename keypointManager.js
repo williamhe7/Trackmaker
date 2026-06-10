@@ -1,9 +1,8 @@
-// keypointManager.js
 export class KeypointManager {
     constructor() {
         this.w = 1600;
         this.h = 1200;
-        
+
         this.scale_dict = {
             2: 1.07939633,
             3: 2.15879265,
@@ -12,384 +11,246 @@ export class KeypointManager {
             6: 5.39698163,
             7: 6.47637795
         };
-        
+
         this.keys = [];
         this.homography = [];
         this.source = [];
         this.scale_factor = 1;
+
         this.scaled_width = 800;
         this.scaled_height = 300;
     }
 
     async get_kpps(videoElement, session) {
         if (!session) return [];
-    
+
         const INPUT_SIZE = 1600;
-    
-        // Ultralytics LetterBox
+
         const ratio = Math.min(
             INPUT_SIZE / videoElement.videoWidth,
             INPUT_SIZE / videoElement.videoHeight
         );
-    
+
         const newW = Math.round(videoElement.videoWidth * ratio);
         const newH = Math.round(videoElement.videoHeight * ratio);
-    
+
         const padX = (INPUT_SIZE - newW) / 2;
         const padY = (INPUT_SIZE - newH) / 2;
-    
+
         const canvas = document.createElement("canvas");
         canvas.width = INPUT_SIZE;
         canvas.height = INPUT_SIZE;
-    
-        const ctx = canvas.getContext("2d", {
-            willReadFrequently: true
-        });
-    
-        // Ultralytics padding color
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
         ctx.fillStyle = "rgb(114,114,114)";
         ctx.fillRect(0, 0, INPUT_SIZE, INPUT_SIZE);
-    
-        ctx.drawImage(
-            videoElement,
-            padX,
-            padY,
-            newW,
-            newH
-        );
-    
-        const imageData =
-            ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
-    
+
+        ctx.drawImage(videoElement, padX, padY, newW, newH);
+
+        const imageData = ctx.getImageData(0, 0, INPUT_SIZE, INPUT_SIZE);
         const area = INPUT_SIZE * INPUT_SIZE;
-    
-        const inputData =
-            new Float32Array(3 * area);
-    
+
+        const inputData = new Float32Array(3 * area);
+
         for (let i = 0; i < area; i++) {
-    
             const p = i * 4;
-    
-            inputData[i] =
-                imageData.data[p] / 255.0;
-    
-            inputData[i + area] =
-                imageData.data[p + 1] / 255.0;
-    
-            inputData[i + area * 2] =
-                imageData.data[p + 2] / 255.0;
+            inputData[i] = imageData.data[p] / 255;
+            inputData[i + area] = imageData.data[p + 1] / 255;
+            inputData[i + 2 * area] = imageData.data[p + 2] / 255;
         }
-    
-        const tensor = new ort.Tensor(
-            "float32",
-            inputData,
-            [1, 3, INPUT_SIZE, INPUT_SIZE]
-        );
-    
+
+        const tensor = new ort.Tensor("float32", inputData, [1, 3, INPUT_SIZE, INPUT_SIZE]);
+
         let results;
-    
         try {
-            results = await session.run({
-                images: tensor
-            });
+            results = await session.run({ images: tensor });
         } catch {
-    
-            const inputName =
-                session.inputNames[0];
-    
-            results = await session.run({
-                [inputName]: tensor
-            });
+            results = await session.run({ [session.inputNames[0]]: tensor });
         }
-    
-        const output =
-            results.output0 ||
-            Object.values(results)[0];
-    
+
+        const output = results.output0 || Object.values(results)[0];
+
         return this.sort_by_lowest_x(
-            this.postProcessYOLOPose(
-                output.data,
-                ratio,
-                padX,
-                padY
-            )
+            this.postProcessYOLOPose(output.data, ratio, padX, padY)
         );
     }
-    
-    postProcessYOLOPose(
-        rawOutput,
-        scale,
-        padX,
-        padY
-    ) {
-    
-        const detections = [];
-    
-        const CONF_THRESHOLD = 0.25;
-    
-        // Your model is [1,300,12]
-        const VALUES_PER_DETECTION = 12;
-    
-        const numDetections =
-            Math.floor(
-                rawOutput.length /
-                VALUES_PER_DETECTION
-            );
-    
-        for (let i = 0; i < numDetections; i++) {
-    
-            const o =
-                i * VALUES_PER_DETECTION;
-    
-            const conf =
-                rawOutput[o + 4];
-    
-            if (conf < CONF_THRESHOLD)
-                continue;
-    
-            // ONNX outputs coordinates
-            // in LETTERBOX space
-    
-            let kp1x =
-                rawOutput[o + 6];
-    
-            let kp1y =
-                rawOutput[o + 7];
-    
-            let kp2x =
-                rawOutput[o + 9];
-    
-            let kp2y =
-                rawOutput[o + 10];
-    
-            // Undo letterbox
-            kp1x = (kp1x - padX) / scale;
-            kp1y = (kp1y - padY) / scale;
-    
-            kp2x = (kp2x - padX) / scale;
-            kp2y = (kp2y - padY) / scale;
-    
-            if (
-                !Number.isFinite(kp1x) ||
-                !Number.isFinite(kp1y) ||
-                !Number.isFinite(kp2x) ||
-                !Number.isFinite(kp2y)
-            ) {
-                continue;
-            }
-    
-            detections.push([
-                [kp1x, kp1y],
-                [kp2x, kp2y]
-            ]);
+
+    postProcessYOLOPose(raw, scale, padX, padY) {
+        const out = [];
+        const stride = 12;
+
+        for (let i = 0; i < raw.length / stride; i++) {
+            const o = i * stride;
+            const conf = raw[o + 4];
+            if (conf < 0.25) continue;
+
+            let x1 = (raw[o + 6] - padX) / scale;
+            let y1 = (raw[o + 7] - padY) / scale;
+            let x2 = (raw[o + 9] - padX) / scale;
+            let y2 = (raw[o + 10] - padY) / scale;
+
+            out.push([[x1, y1], [x2, y2]]);
         }
-    
-        console.log(
-            `Found ${detections.length} key groups`
-        );
-    
-        return detections;
+
+        return out;
     }
 
-    // Matches Python
     sort_by_lowest_x(kpps) {
-        if (!kpps || kpps.length === 0) return [];
-        return kpps.sort((a, b) => {
-            const minA = Math.min(...a.map(p => p[0]));
-            const minB = Math.min(...b.map(p => p[0]));
-            return minA - minB;
-        });
+        if (!kpps) return [];
+        return kpps.sort((a, b) =>
+            Math.min(a[0][0], a[1][0]) - Math.min(b[0][0], b[1][0])
+        );
     }
 
-    // Matches Python
     compute_homography(keys, targetH = 1200) {
         this.homography = [];
         this.source = [];
-        this.keys = keys || [];
+        this.keys = keys;
 
-        if (keys.length < 2) {
-            console.warn("Not enough key groups for homography");
-            return;
-        }
+        if (keys.length < 2) return;
 
-        if (keys.length > 7) keys = keys.slice(0, 7);
+        const limited = keys.slice(0, 7);
 
-        for (let i = 0; i < keys.length - 1; i++) {
-            const group1 = keys[i];
-            const group2 = keys[i + 1];
+        for (let i = 0; i < limited.length - 1; i++) {
+            const g1 = limited[i];
+            const g2 = limited[i + 1];
 
-            const lt = group1[0];
-            const lb = group1[1];
-            const rt = group2[0];
-            const rb = group2[1];
-
-            const srcPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-                lt[0], lt[1], rt[0], rt[1], rb[0], rb[1], lb[0], lb[1]
+            const src = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                g1[0][0], g1[0][1],
+                g2[0][0], g2[0][1],
+                g2[1][0], g2[1][1],
+                g1[1][0], g1[1][1]
             ]);
 
-            const dstWidth = 800;
-            const dstPoints = cv.matFromArray(4, 1, cv.CV_32FC2, [
-                0, 0, dstWidth-1, 0, dstWidth-1, targetH-1, 0, targetH-1
+            const dst = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0,
+                800, 0,
+                800, targetH,
+                0, targetH
             ]);
 
-            const H = cv.getPerspectiveTransform(srcPoints, dstPoints);
-            this.homography.push(H);
-            this.source.push(srcPoints);
+            this.homography.push(cv.getPerspectiveTransform(src, dst));
+            this.source.push(src);
         }
 
-        this.scale_factor = this.scale_dict[keys.length] || 1.0;
-        console.log(`✅ Homography computed for ${keys.length} key groups`);
+        this.scale_factor = this.scale_dict[keys.length] || 1;
     }
 
-    // Matches Python
+    // ================================
+    // FIXED + MOBILE OPTIMIZED
+    // ================================
     transformImage(videoElement) {
-    
-        if (
-            !videoElement ||
-            this.keys.length < 2 ||
-            this.homography.length === 0
-        ) {
-            return null;
-        }
-    
+
+        if (!videoElement || this.homography.length === 0) return null;
+
         const frameCanvas = document.createElement("canvas");
         frameCanvas.width = videoElement.videoWidth;
         frameCanvas.height = videoElement.videoHeight;
-    
-        const frameCtx = frameCanvas.getContext("2d");
-        frameCtx.drawImage(videoElement, 0, 0);
-    
+
+        const ctx = frameCanvas.getContext("2d");
+        ctx.drawImage(videoElement, 0, 0);
+
         const srcMat = cv.imread(frameCanvas);
-    
-        const pieces = [];
-    
+
+        let outputParts = [];
+
         try {
-    
+            const warpSize = new cv.Size(
+                Math.floor(srcMat.cols * 1.2),
+                Math.floor(srcMat.rows * 1.2)
+            );
+
             for (let i = 0; i < this.homography.length; i++) {
-    
-                const H = this.homography[i];
-    
+
                 const warped = new cv.Mat();
-    
-                cv.warpPerspective(
-                    srcMat,
-                    warped,
-                    H,
-                    new cv.Size(srcMat.cols * 2, srcMat.rows * 2)
-                );
-    
-                const transformed = new cv.Mat();
-    
-                cv.perspectiveTransform(
-                    this.source[i],
-                    transformed,
-                    H
-                );
-    
-                const pts = transformed.data32F;
-    
+                cv.warpPerspective(srcMat, warped, this.homography[i], warpSize);
+
+                const pts = new cv.Mat();
+                cv.perspectiveTransform(this.source[i], pts, this.homography[i]);
+
+                const data = pts.data32F;
+
                 let minX = Infinity;
                 let maxX = -Infinity;
-    
-                for (let p = 0; p < pts.length; p += 2) {
-                    minX = Math.min(minX, pts[p]);
-                    maxX = Math.max(maxX, pts[p]);
+
+                for (let j = 0; j < data.length; j += 2) {
+                    minX = Math.min(minX, data[j]);
+                    maxX = Math.max(maxX, data[j]);
                 }
-    
+
                 const x0 = Math.max(0, Math.floor(minX));
                 const x1 = Math.min(warped.cols, Math.ceil(maxX));
-    
+
+                pts.delete();
+
                 if (x1 <= x0 + 5) {
                     warped.delete();
-                    transformed.delete();
                     continue;
                 }
-    
-                const roi = warped.roi(
-                    new cv.Rect(x0, 0, x1 - x0, warped.rows)
-                );
-    
+
+                const roi = warped.roi(new cv.Rect(x0, 0, x1 - x0, warped.rows));
+
                 const resized = new cv.Mat();
-    
-                cv.resize(
-                    roi,
-                    resized,
-                    new cv.Size(roi.cols, this.h)
-                );
-    
-                pieces.push(resized);
-    
+                cv.resize(roi, resized, new cv.Size(roi.cols, this.h));
+
                 roi.delete();
                 warped.delete();
-                transformed.delete();
+
+                outputParts.push(resized);
             }
-    
-            if (pieces.length === 0) {
+
+            if (outputParts.length === 0) {
                 srcMat.delete();
                 return null;
             }
-    
-            // ---------------- SAFE CONCAT ----------------
-            const matVector = new cv.MatVector();
-    
-            for (const piece of pieces) {
-                matVector.push_back(piece);
+
+            // SAFE CONCAT (manual, no MatVector bugs)
+            let combined = outputParts[0];
+
+            for (let i = 1; i < outputParts.length; i++) {
+                const next = outputParts[i];
+
+                const dst = new cv.Mat();
+                cv.hconcat(combined, next, dst);
+
+                combined.delete();
+                next.delete();
+
+                combined = dst;
             }
-    
-            const combined = new cv.Mat();
-            cv.hconcat(matVector, combined);
-    
-            matVector.delete();
-    
-            // DO NOT TOUCH pieces YET
-    
-            const finalHeight = Math.max(
-                1,
-                Math.round(combined.cols / this.scale_factor)
-            );
-    
+
+            const finalH = Math.max(1, Math.round(combined.cols / this.scale_factor));
+
             const resized = new cv.Mat();
-            cv.resize(
-                combined,
-                resized,
-                new cv.Size(combined.cols, finalHeight),
-                0,
-                0,
-                cv.INTER_CUBIC
-            );
-    
+            cv.resize(combined, resized, new cv.Size(combined.cols, finalH));
+
             const rotated = new cv.Mat();
             cv.rotate(resized, rotated, cv.ROTATE_180);
-    
-            const outputCanvas = document.createElement("canvas");
-            outputCanvas.width = rotated.cols;
-            outputCanvas.height = rotated.rows;
-    
-            cv.imshow(outputCanvas, rotated);
-    
-            // ================= SAFE CLEANUP ORDER =================
-    
-            rotated.delete();
-            resized.delete();
-            combined.delete();
+
+            const canvas = document.createElement("canvas");
+            canvas.width = rotated.cols;
+            canvas.height = rotated.rows;
+
+            cv.imshow(canvas, rotated);
+
+            // CLEANUP
             srcMat.delete();
-    
-            for (const p of pieces) {
-                try { p.delete(); } catch {}
-            }
-    
-            return outputCanvas;
-    
-        } catch (err) {
-    
-            console.error("transformImage failed", err);
-    
+            combined.delete();
+            resized.delete();
+            rotated.delete();
+
+            return canvas;
+
+        } catch (e) {
+            console.error("transformImage failed:", e);
+
             try { srcMat.delete(); } catch {}
-    
-            for (const p of pieces) {
+
+            for (const p of outputParts) {
                 try { p.delete(); } catch {}
             }
-    
+
             return null;
         }
     }
