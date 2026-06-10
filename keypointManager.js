@@ -3,10 +3,16 @@ export class KeypointManager {
     constructor() {
         this.w = 1600;
         this.h = 1200;
-        this.scale_dict = { 
-            2: 1.07939633, 3: 2.15879265, 4: 3.23818898, 
-            5: 4.31758530, 6: 5.39698163, 7: 6.47637795 
+        
+        this.scale_dict = {
+            2: 1.07939633,
+            3: 2.15879265,
+            4: 3.23818898,
+            5: 4.31758530,
+            6: 5.39698163,
+            7: 6.47637795
         };
+        
         this.keys = [];
         this.homography = [];
         this.source = [];
@@ -15,7 +21,8 @@ export class KeypointManager {
         this.scaled_height = 300;
     }
 
-    async getKeypoints(videoElement, session) {
+    // Matches Python naming
+    async get_kpps(videoElement, session) {
         if (!session) return [];
 
         const inputSize = 1600;
@@ -47,18 +54,22 @@ export class KeypointManager {
         const outputTensor = results.output0 || results.output || Object.values(results)[0];
         const rawOutput = outputTensor.data;
 
-        return this.postProcessYOLOPose(rawOutput, inputSize);
+        const kpps = this.postProcessYOLOPose(rawOutput, inputSize);
+        return this.sort_by_lowest_x(kpps);
     }
 
+    // Updated for 2 keypoints per group
     postProcessYOLOPose(rawOutput, imgSize = 1600) {
         console.log(`Total output values: ${rawOutput.length}`);
 
         const detections = [];
-        const confThreshold = 0.35;        // Increased
-        const valuesPerDetection = 23;
+        const confThreshold = 0.40;        // Higher to reduce false positives on placebo
+        const valuesPerDetection = 11;     // 4(bbox) + 1(obj) + 1(cls) + 2kpts*3 = 11
+        const kptStart = 6;                // After bbox + obj + cls
+        const numKeypoints = 2;            // ← This is what you trained for
 
         const numDetections = Math.floor(rawOutput.length / valuesPerDetection);
-        console.log(`Raw detections: ${numDetections}`);
+        console.log(`Raw detections: ${numDetections} | valuesPerDetection=${valuesPerDetection}`);
 
         for (let i = 0; i < numDetections; i++) {
             const offset = i * valuesPerDetection;
@@ -67,58 +78,53 @@ export class KeypointManager {
             if (confidence < confThreshold) continue;
 
             const kpts = [];
-            const kptStart = 6;
-
-            for (let k = 0; k < 6; k++) {
+            
+            for (let k = 0; k < numKeypoints; k++) {
                 const base = kptStart + k * 3;
                 const x = rawOutput[offset + base] * imgSize;
                 const y = rawOutput[offset + base + 1] * imgSize;
                 const vis = rawOutput[offset + base + 2];
 
-                if (vis > 0.6 && x > 20 && y > 20 && x < imgSize - 20 && y < imgSize - 20) {
+                if (vis > 0.5 && x > 20 && y > 20 && x < imgSize - 20 && y < imgSize - 20) {
                     kpts.push([x, y]);
                 }
             }
 
-            if (kpts.length >= 4) {   // Need most keypoints visible
+            if (kpts.length >= 2) {
                 detections.push(kpts);
             }
         }
 
-        // Simple NMS + clustering by X position
         const clustered = this.clusterDetections(detections);
-        const sorted = this.sortByLowestX(clustered);
-        
-        console.log(`✅ Final valid key groups: ${sorted.length}`);
-        return sorted;
+        console.log(`✅ Final valid keypoint groups: ${clustered.length}`);
+        console.log("📍 Pose Keypoints Array:", JSON.stringify(clustered, null, 2));
+
+        return clustered;
     }
 
     clusterDetections(detections) {
-        if (detections.length <= 7) return detections; // already reasonable
+        if (detections.length <= 7) return detections;
 
-        // Group by X position (piano keys are spaced horizontally)
         const groups = [];
-        const threshold = 80; // pixels
+        const threshold = 90; // horizontal clustering
 
         for (const det of detections) {
-            const centerX = det.reduce((sum, p) => sum + p[0], 0) / det.length;
+            const centerX = (det[0][0] + det[1][0]) / 2;
             let added = false;
-
             for (const g of groups) {
-                const gCenterX = g.reduce((sum, p) => sum + p[0], 0) / g.length;
+                const gCenterX = (g[0][0] + g[1][0]) / 2;
                 if (Math.abs(centerX - gCenterX) < threshold) {
-                    g.push(...det);
                     added = true;
                     break;
                 }
             }
-            if (!added) groups.push([...det]);
+            if (!added) groups.push(det);
         }
-
-        return groups.slice(0, 7); // max 7 groups
+        return groups.slice(0, 7);
     }
 
-    sortByLowestX(kpps) {
+    // Matches Python
+    sort_by_lowest_x(kpps) {
         if (!kpps || kpps.length === 0) return [];
         return kpps.sort((a, b) => {
             const minA = Math.min(...a.map(p => p[0]));
@@ -127,7 +133,8 @@ export class KeypointManager {
         });
     }
 
-    computeHomography(keys, targetH = 1200) {
+    // Matches Python
+    compute_homography(keys, targetH = 1200) {
         this.homography = [];
         this.source = [];
         this.keys = keys || [];
@@ -137,10 +144,7 @@ export class KeypointManager {
             return;
         }
 
-        if (keys.length > 7) {
-            console.warn(`Too many groups (${keys.length}), using first 7`);
-            keys = keys.slice(0, 7);
-        }
+        if (keys.length > 7) keys = keys.slice(0, 7);
 
         for (let i = 0; i < keys.length - 1; i++) {
             const group1 = keys[i];
@@ -169,8 +173,8 @@ export class KeypointManager {
         console.log(`✅ Homography computed for ${keys.length} key groups`);
     }
 
-    // Full transform matching Python version
-    transformImage(videoElement) {
+    // Matches Python
+    transform_image(videoElement) {
         if (this.keys.length < 2 || this.homography.length === 0) return null;
 
         const srcMat = cv.imread(videoElement);
@@ -182,7 +186,6 @@ export class KeypointManager {
             const warpedFull = new cv.Mat();
             cv.warpPerspective(srcMat, warpedFull, H, new cv.Size(videoElement.videoWidth * 2, videoElement.videoHeight * 2));
 
-            // Get crop bounds
             const srcPointsMat = this.source[i].clone();
             const transformed = new cv.Mat();
             cv.perspectiveTransform(srcPointsMat, transformed, H);
@@ -211,7 +214,6 @@ export class KeypointManager {
             srcPointsMat.delete();
         }
 
-        // Combine with hconcat (iteratively)
         let combined = imgList[0];
         for (let i = 1; i < imgList.length; i++) {
             const newCombined = new cv.Mat();
@@ -221,7 +223,6 @@ export class KeypointManager {
             imgList[i].delete();
         }
 
-        // Final processing
         const finalH = Math.round(combined.cols / this.scale_factor);
         const finalResized = new cv.Mat();
         cv.resize(combined, finalResized, new cv.Size(combined.cols, finalH), 0, 0, cv.INTER_CUBIC);
@@ -229,7 +230,6 @@ export class KeypointManager {
         const rotated = new cv.Mat();
         cv.rotate(finalResized, rotated, cv.ROTATE_180);
 
-        // Scale
         const screenHeightApprox = window.innerHeight * 0.48;
         const scale = screenHeightApprox / rotated.rows;
         this.scaled_width = Math.round(rotated.cols * scale);
@@ -243,7 +243,6 @@ export class KeypointManager {
         resultCanvas.height = this.scaled_height;
         cv.imshow(resultCanvas, finalMat);
 
-        // Cleanup
         srcMat.delete();
         combined.delete();
         finalResized.delete();
