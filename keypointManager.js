@@ -125,7 +125,7 @@ export class KeypointManager {
     
         const detections = [];
     
-        const CONF_THRESHOLD = 0.40;
+        const CONF_THRESHOLD = 0.25;
     
         // Your model is [1,300,12]
         const VALUES_PER_DETECTION = 12;
@@ -145,16 +145,6 @@ export class KeypointManager {
                 rawOutput[o + 4];
     
             if (conf < CONF_THRESHOLD)
-                continue;
-    
-            const kp1conf =
-                rawOutput[o + 8];
-    
-            const kp2conf =
-                rawOutput[o + 11];
-    
-            if (kp1conf < 0.5 ||
-                kp2conf < 0.5)
                 continue;
     
             // ONNX outputs coordinates
@@ -194,37 +184,11 @@ export class KeypointManager {
             ]);
         }
     
-        const clustered =
-            this.clusterDetections(
-                detections
-            );
-    
         console.log(
-            `Found ${clustered.length} key groups`
+            `Found ${detections.length} key groups`
         );
     
-        return clustered;
-    }
-
-    clusterDetections(detections) {
-        if (detections.length <= 7) return detections;
-
-        const groups = [];
-        const threshold = 90; // horizontal clustering
-
-        for (const det of detections) {
-            const centerX = (det[0][0] + det[1][0]) / 2;
-            let added = false;
-            for (const g of groups) {
-                const gCenterX = (g[0][0] + g[1][0]) / 2;
-                if (Math.abs(centerX - gCenterX) < threshold) {
-                    added = true;
-                    break;
-                }
-            }
-            if (!added) groups.push(det);
-        }
-        return groups.slice(0, 7);
+        return detections;
     }
 
     // Matches Python
