@@ -213,7 +213,6 @@ function loop() {
     if (isCalibrated) {
         pianoCanvas = keypointManager.transformImage(video);
 
-        #DEBUG
         console.log(
             keypointManager.transformImage(video)
         );
