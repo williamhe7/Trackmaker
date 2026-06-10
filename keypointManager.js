@@ -242,81 +242,250 @@ export class KeypointManager {
     }
 
     // Matches Python
-    transform_image(videoElement) {
-        if (this.keys.length < 2 || this.homography.length === 0) return null;
-
-        const srcMat = cv.imread(videoElement);
-        const imgList = [];
-
-        for (let i = 0; i < this.homography.length; i++) {
-            const H = this.homography[i];
-
-            const warpedFull = new cv.Mat();
-            cv.warpPerspective(srcMat, warpedFull, H, new cv.Size(videoElement.videoWidth * 2, videoElement.videoHeight * 2));
-
-            const srcPointsMat = this.source[i].clone();
-            const transformed = new cv.Mat();
-            cv.perspectiveTransform(srcPointsMat, transformed, H);
-
-            const data = transformed.data32F;
-            let minX = Infinity, maxX = -Infinity;
-            for (let j = 0; j < data.length; j += 2) {
-                minX = Math.min(minX, data[j]);
-                maxX = Math.max(maxX, data[j]);
+    transformImage(videoElement) {
+    
+        if (
+            !videoElement ||
+            this.keys.length < 2 ||
+            this.homography.length === 0
+        ) {
+            return null;
+        }
+    
+        const frameCanvas =
+            document.createElement("canvas");
+    
+        frameCanvas.width =
+            videoElement.videoWidth;
+    
+        frameCanvas.height =
+            videoElement.videoHeight;
+    
+        const frameCtx =
+            frameCanvas.getContext("2d");
+    
+        frameCtx.drawImage(
+            videoElement,
+            0,
+            0
+        );
+    
+        const srcMat =
+            cv.imread(frameCanvas);
+    
+        const pieces = [];
+    
+        try {
+    
+            for (
+                let i = 0;
+                i < this.homography.length;
+                i++
+            ) {
+    
+                const H =
+                    this.homography[i];
+    
+                const warped =
+                    new cv.Mat();
+    
+                cv.warpPerspective(
+                    srcMat,
+                    warped,
+                    H,
+                    new cv.Size(
+                        srcMat.cols * 2,
+                        srcMat.rows * 2
+                    )
+                );
+    
+                const transformed =
+                    new cv.Mat();
+    
+                cv.perspectiveTransform(
+                    this.source[i],
+                    transformed,
+                    H
+                );
+    
+                const pts =
+                    transformed.data32F;
+    
+                let minX = Infinity;
+                let maxX = -Infinity;
+    
+                for (
+                    let p = 0;
+                    p < pts.length;
+                    p += 2
+                ) {
+                    minX =
+                        Math.min(
+                            minX,
+                            pts[p]
+                        );
+    
+                    maxX =
+                        Math.max(
+                            maxX,
+                            pts[p]
+                        );
+                }
+    
+                const x0 =
+                    Math.max(
+                        0,
+                        Math.floor(minX)
+                    );
+    
+                const x1 =
+                    Math.min(
+                        warped.cols,
+                        Math.ceil(maxX)
+                    );
+    
+                if (x1 <= x0 + 5) {
+    
+                    console.warn(
+                        "Skipping bad ROI",
+                        x0,
+                        x1
+                    );
+    
+                    warped.delete();
+                    transformed.delete();
+    
+                    continue;
+                }
+    
+                const roi =
+                    warped.roi(
+                        new cv.Rect(
+                            x0,
+                            0,
+                            x1 - x0,
+                            warped.rows
+                        )
+                    );
+    
+                const resized =
+                    new cv.Mat();
+    
+                cv.resize(
+                    roi,
+                    resized,
+                    new cv.Size(
+                        roi.cols,
+                        this.h
+                    )
+                );
+    
+                pieces.push(resized);
+    
+                roi.delete();
+                warped.delete();
+                transformed.delete();
             }
-
-            const xMin = Math.max(0, Math.floor(minX));
-            const xMax = Math.min(warpedFull.cols, Math.ceil(maxX));
-
-            const rect = new cv.Rect(xMin, 0, xMax - xMin, warpedFull.rows);
-            const cropped = warpedFull.roi(rect);
-
-            const resized = new cv.Mat();
-            cv.resize(cropped, resized, new cv.Size(cropped.cols, this.h), 0, 0, cv.INTER_LINEAR);
-
-            imgList.push(resized);
-
-            warpedFull.delete();
-            transformed.delete();
-            cropped.delete();
-            srcPointsMat.delete();
-        }
-
-        let combined = imgList[0];
-        for (let i = 1; i < imgList.length; i++) {
-            const newCombined = new cv.Mat();
-            cv.hconcat(combined, imgList[i], newCombined);
+    
+            if (pieces.length === 0) {
+                srcMat.delete();
+                return null;
+            }
+    
+            let combined =
+                pieces[0];
+    
+            for (
+                let i = 1;
+                i < pieces.length;
+                i++
+            ) {
+    
+                const tmp =
+                    new cv.Mat();
+    
+                cv.hconcat(
+                    combined,
+                    pieces[i],
+                    tmp
+                );
+    
+                combined.delete();
+                pieces[i].delete();
+    
+                combined = tmp;
+            }
+    
+            const finalHeight =
+                Math.max(
+                    1,
+                    Math.round(
+                        combined.cols /
+                        this.scale_factor
+                    )
+                );
+    
+            const resized =
+                new cv.Mat();
+    
+            cv.resize(
+                combined,
+                resized,
+                new cv.Size(
+                    combined.cols,
+                    finalHeight
+                ),
+                0,
+                0,
+                cv.INTER_CUBIC
+            );
+    
+            const rotated =
+                new cv.Mat();
+    
+            cv.rotate(
+                resized,
+                rotated,
+                cv.ROTATE_180
+            );
+    
+            const outputCanvas =
+                document.createElement("canvas");
+    
+            outputCanvas.width =
+                rotated.cols;
+    
+            outputCanvas.height =
+                rotated.rows;
+    
+            cv.imshow(
+                outputCanvas,
+                rotated
+            );
+    
+            console.log(
+                "Homography image:",
+                rotated.cols,
+                rotated.rows
+            );
+    
+            srcMat.delete();
             combined.delete();
-            combined = newCombined;
-            imgList[i].delete();
+            resized.delete();
+            rotated.delete();
+    
+            return outputCanvas;
+    
+        } catch (err) {
+    
+            console.error(
+                "transformImage failed",
+                err
+            );
+    
+            srcMat.delete();
+    
+            return null;
         }
-
-        const finalH = Math.round(combined.cols / this.scale_factor);
-        const finalResized = new cv.Mat();
-        cv.resize(combined, finalResized, new cv.Size(combined.cols, finalH), 0, 0, cv.INTER_CUBIC);
-
-        const rotated = new cv.Mat();
-        cv.rotate(finalResized, rotated, cv.ROTATE_180);
-
-        const screenHeightApprox = window.innerHeight * 0.48;
-        const scale = screenHeightApprox / rotated.rows;
-        this.scaled_width = Math.round(rotated.cols * scale);
-        this.scaled_height = Math.round(rotated.rows * scale);
-
-        const finalMat = new cv.Mat();
-        cv.resize(rotated, finalMat, new cv.Size(this.scaled_width, this.scaled_height));
-
-        const resultCanvas = document.createElement('canvas');
-        resultCanvas.width = this.scaled_width;
-        resultCanvas.height = this.scaled_height;
-        cv.imshow(resultCanvas, finalMat);
-
-        srcMat.delete();
-        combined.delete();
-        finalResized.delete();
-        rotated.delete();
-        finalMat.delete();
-
-        return resultCanvas;
     }
 }
