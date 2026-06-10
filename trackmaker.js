@@ -114,7 +114,6 @@ async function startWebcam() {
         video.srcObject = stream;
         video.playsInline = true;
         video.muted = true;
-        
         await video.play();
 
         resizeCanvas();
@@ -137,10 +136,9 @@ async function startWebcam() {
 function resizeCanvas() {
     if (!canvas) return;
     canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    keypointManager.frameCanvas.width = canvas.width;
-    keypointManager.frameCanvas.height = canvas.height;
+    const topBar = document.getElementById('top-bar');
+    const topHeight = topBar ? topBar.offsetHeight : 140;
+    canvas.height = window.innerHeight - topHeight - 10;
 }
 
 async function calibrate() {
@@ -202,10 +200,7 @@ function toggleFullscreen() {
 
 document.addEventListener('fullscreenchange', () => setTimeout(resizeCanvas, 100));
 
-let frameCount = 0;
-
 function loop() {
-    frameCount++;
     if (!isRunning || !video) {
         requestAnimationFrame(loop);
         return;
@@ -215,8 +210,13 @@ function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     let pianoCanvas = null;
-    if (isCalibrated && frameCount%2==0) {
+    if (isCalibrated) {
         pianoCanvas = keypointManager.transformImage(video);
+
+        //log
+        console.log(
+            keypointManager.transformImage(video)
+        );
     }
 
     if (pianoCanvas) {
