@@ -208,14 +208,14 @@ function loop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     let pianoCanvas = null;
-    if (isCalibrated && keypointManager.keys.length >= 2) {
+    if (isCalibrated) {
         pianoCanvas = keypointManager.transformImage(video);
     }
 
     if (pianoCanvas) {
         // Draw transformed piano
         const drawX = (canvas.width - pianoCanvas.width) / 2;
-        const drawY = (canvas.height - pianoCanvas.height) / 2;
+        const drawY = canvas.height - pianoCanvas.height - 10;
         ctx.drawImage(pianoCanvas, drawX, drawY);
     } else {
         // Fallback: original draw
