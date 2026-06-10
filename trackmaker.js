@@ -12,18 +12,23 @@ let isRunning = false;
 let started = false;
 let isCalibrated = false;
 
+// ← CHANGE THIS TO YOUR ACTUAL MODEL URL
+//const MODEL_URL = 'best_v3.onnx';   // Use full URL if needed, e.g.:
+const MODEL_URL = 'https://williamhe7.github.io/trackmaker/best_v3.onnx';
+
 async function initONNX() {
-    updateStatus('Loading AI model (this may take 10-30s on mobile)...');
+    updateStatus('Loading AI model (~11MB)... This may take 15-40s on mobile');
     try {
-        session = await ort.InferenceSession.create('best_v3.onnx', {
-            executionProviders: ['wasm'],   // Force WASM for better mobile stability
+        session = await ort.InferenceSession.create(MODEL_URL, {
+            executionProviders: ['wasm'],
             graphOptimizationLevel: 'basic'
         });
+        console.log('✅ Model loaded from URL');
         updateStatus('✅ Model loaded successfully');
         return true;
     } catch (e) {
-        console.error('ONNX Load Error:', e);
-        updateStatus('❌ Model failed to load. Try on desktop or refresh.');
+        console.error('Model load failed:', e);
+        updateStatus('❌ Failed to load model. Check console.');
         return false;
     }
 }
@@ -32,14 +37,14 @@ export async function initTrackmaker() {
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
     
-    const success = await initONNX();
+    const modelLoaded = await initONNX();
     
     keypointManager = new KeypointManager();
     pianoManager = new PianoManager(keypointManager);
     midiManager = new MidiManager(pianoManager, 180);
 
     setupUI();
-    if (success) {
+    if (modelLoaded) {
         updateStatus('✅ Ready — Tap "Start Camera"');
     }
 }
@@ -83,7 +88,7 @@ async function startWebcam() {
 
         isRunning = true;
         document.getElementById('btnCalibrate').disabled = false;
-        updateStatus('✅ Selfie Camera Active — Point at piano and tap Recalibrate');
+        updateStatus('✅ Selfie Camera Active — Point piano at camera and tap Recalibrate');
         loop();
     } catch (e) {
         console.error('Camera Error:', e);
@@ -91,6 +96,8 @@ async function startWebcam() {
         if (btn) btn.disabled = false;
     }
 }
+
+// ... [rest of the file remains the same as previous version]
 
 function resizeCanvas() {
     if (!canvas) return;
@@ -117,7 +124,7 @@ async function calibrate() {
             document.getElementById('btnStart').disabled = false;
             updateStatus(`✅ Calibrated with ${kps.length} key groups`);
         } else {
-            updateStatus('⚠️ Not enough keys detected. Try better lighting.');
+            updateStatus('⚠️ Not enough keys. Try better lighting/angle.');
         }
     } catch (e) {
         console.error(e);
@@ -125,7 +132,6 @@ async function calibrate() {
     }
 }
 
-// Other functions (selectMIDI, startPlayback, toggleFullscreen, loop) remain the same as previous version
 function selectMIDI() {
     if (!isCalibrated) return;
     const input = document.createElement('input');
