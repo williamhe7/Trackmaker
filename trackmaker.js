@@ -47,6 +47,14 @@ export async function initTrackmaker() {
     if (modelLoaded) {
         updateStatus('✅ Ready — Tap "Start Camera"');
     }
+    waitForCV()
+}
+
+function waitForCV() {
+    return new Promise(resolve => {
+        if (typeof cv !== 'undefined') resolve();
+        else setTimeout(() => waitForCV().then(resolve), 100);
+    });
 }
 
 function updateStatus(msg) {
@@ -199,20 +207,33 @@ function loop() {
     ctx.save();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    const vW = video.videoWidth || 1280;
-    const vH = video.videoHeight || 720;
-    const ratio = vW / vH;
-
-    let drawW = canvas.width;
-    let drawH = drawW / ratio;
-    let offsetY = (canvas.height - drawH) / 2;
-
-    if (drawH > canvas.height) {
-        drawH = canvas.height;
-        drawW = drawH * ratio;
+    let pianoCanvas = null;
+    if (isCalibrated && keypointManager.keys.length >= 2) {
+        pianoCanvas = keypointManager.transformImage(video);
     }
 
-    ctx.drawImage(video, (canvas.width - drawW)/2, offsetY, drawW, drawH);
+    if (pianoCanvas) {
+        // Draw transformed piano
+        const drawX = (canvas.width - pianoCanvas.width) / 2;
+        const drawY = (canvas.height - pianoCanvas.height) / 2;
+        ctx.drawImage(pianoCanvas, drawX, drawY);
+    } else {
+        // Fallback: original draw
+        const vW = video.videoWidth || 1280;
+        const vH = video.videoHeight || 720;
+        const ratio = vW / vH;
+
+        let drawW = canvas.width;
+        let drawH = drawW / ratio;
+        let offsetY = (canvas.height - drawH) / 2;
+
+        if (drawH > canvas.height) {
+            drawH = canvas.height;
+            drawW = drawH * ratio;
+        }
+
+        ctx.drawImage(video, (canvas.width - drawW)/2, offsetY, drawW, drawH);
+    }
 
     if (started && midiManager.notes.length > 0) {
         const currentTime = performance.now() / 1000;
