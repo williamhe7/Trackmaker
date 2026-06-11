@@ -18,7 +18,7 @@ const MODEL_URL = 'https://williamhe7.github.io/trackmaker/best_v3.onnx';
 /* -------------------- INIT -------------------- */
 
 async function initONNX() {
-    updateStatus('Loading AI model...');
+    updateStatus('Loading model...');
     try {
         session = await ort.InferenceSession.create(MODEL_URL, {
             executionProviders: ['wasm'],
@@ -35,6 +35,9 @@ async function initONNX() {
 }
 
 export async function initTrackmaker() {
+
+    console.log("version 1.0")
+    
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
 
@@ -192,44 +195,40 @@ function selectMIDI() {
 
     console.log("Select MIDI clicked");
 
-    const input = document.createElement('input');
+    const input = document.createElement("input");
 
-    input.type = 'file';
-    input.accept = '.mid,.midi';
+    input.type = "file";
+    input.accept = ".mid,.midi";
+
+    document.body.appendChild(input);
 
     input.onchange = async (e) => {
 
         console.log("onchange fired");
 
-        console.log("files:", e.target.files);
-
-        if (e.target.files[0]) {
-
-            console.log(
-                "selected:",
-                e.target.files[0].name
-            );
-
-            await midiManager.loadMIDI(
-                e.target.files[0]
-            );
-
-            console.log(
-                "notes:",
-                midiManager.notes.length
-            );
-
-            updateStatus("MIDI loaded");
+        if (!e.target.files.length) {
+            console.log("No file selected");
+            return;
         }
-        else {
 
-            console.log(
-                "No file selected"
-            );
-        }
+        console.log(
+            "selected:",
+            e.target.files[0].name
+        );
+
+        await midiManager.loadMIDI(
+            e.target.files[0]
+        );
+
+        console.log(
+            "notes:",
+            midiManager.notes.length
+        );
+
+        updateStatus("MIDI loaded");
+
+        document.body.removeChild(input);
     };
-
-    console.log("Opening picker");
 
     input.click();
 }
@@ -270,7 +269,6 @@ function loop() {
 
     let pianoCanvas = null;
 
-    // throttle heavy op (IMPORTANT for mobile FPS)
     if (isCalibrated) {
         pianoCanvas = keypointManager.transformImage(video);
     }
