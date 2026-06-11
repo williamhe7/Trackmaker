@@ -189,23 +189,47 @@ async function calibrate() {
 /* -------------------- MIDI -------------------- */
 
 function selectMIDI() {
+
+    console.log("Select MIDI clicked");
+
     const input = document.createElement('input');
+
     input.type = 'file';
     input.accept = '.mid,.midi';
 
     input.onchange = async (e) => {
+
+        console.log("onchange fired");
+
+        console.log("files:", e.target.files);
+
         if (e.target.files[0]) {
-            await midiManager.loadMIDI(e.target.files[0]);
 
-            console.log("notes:", midiManager.notes.length);
+            console.log(
+                "selected:",
+                e.target.files[0].name
+            );
 
-            if (midiManager.notes.length > 0) {
-                console.log(midiManager.notes[0]);
-            }
+            await midiManager.loadMIDI(
+                e.target.files[0]
+            );
 
-            updateStatus('MIDI loaded');
+            console.log(
+                "notes:",
+                midiManager.notes.length
+            );
+
+            updateStatus("MIDI loaded");
+        }
+        else {
+
+            console.log(
+                "No file selected"
+            );
         }
     };
+
+    console.log("Opening picker");
 
     input.click();
 }
