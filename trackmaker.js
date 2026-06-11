@@ -273,6 +273,11 @@ function loop() {
         ctx.drawImage(video, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
     }
 
+    console.log(this.pianoManager.all_keys[0]);
+    console.log(
+        "keys:",
+        this.pianoManager.all_keys.length
+    );
     if (started && midiManager?.notes?.length) {
         const t = performance.now() / 1000;
         midiManager.drawVisualization(ctx, canvas.height, t - midiManager.startTime);
