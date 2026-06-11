@@ -89,7 +89,7 @@ export class KeypointManager {
 
     postProcessYOLOPose(rawOutput, scale, padX, padY) {
         const detections = [];
-        const CONF_THRESHOLD = 0.25;
+        const CONF_THRESHOLD = 0.5;
         const VALUES_PER_DETECTION = 12;
 
         const numDetections = Math.floor(rawOutput.length / VALUES_PER_DETECTION);
