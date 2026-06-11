@@ -13,10 +13,6 @@ let isRunning = false;
 let started = false;
 let isCalibrated = false;
 
-let frameCounter = 0;
-let lastFrameTime = 0;
-let fps = 0;
-
 const MODEL_URL = 'https://williamhe7.github.io/trackmaker/best_v3.onnx';
 
 /* -------------------- INIT -------------------- */
@@ -232,21 +228,12 @@ function loop() {
 
     requestAnimationFrame(loop);
 
-    frameCounter++;
-
-    const now = performance.now();
-    if (now - lastFrameTime > 1000) {
-        fps = frameCounter;
-        frameCounter = 0;
-        lastFrameTime = now;
-    }
-
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     let pianoCanvas = null;
 
     // throttle heavy op (IMPORTANT for mobile FPS)
-    if (isCalibrated && frameCounter % 2 === 0) {
+    if (isCalibrated) {
         pianoCanvas = keypointManager.transformImage(video);
     }
 
