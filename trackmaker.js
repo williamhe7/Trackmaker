@@ -36,7 +36,7 @@ async function initONNX() {
 
 export async function initTrackmaker() {
 
-    console.log("version 1.1")
+    console.log("version 1.2")
     
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
@@ -222,16 +222,34 @@ function selectMIDI() {
 }
 
 function startPlayback() {
-
-    console.log(
-        "started",
-        started,
-        midiManager.startTime
-    );
     
     started = true;
     midiManager.startTime = performance.now() / 1000;
     updateStatus('Playback started');
+
+    const webcamBtn = document.getElementById('btnWebcam');
+    if (webcamBtn){
+        webcamBtn.disabled = true;
+        webcamBtn.hidden = true;
+    }
+
+    const calibrateBtn = document.getElementById('btnCalibrate');
+    if (calibrateBtn){
+        calibrateBtn.disabled = true;
+        calibrateBtn.hidden = true;
+    }
+
+    const midiBtn = document.getElementById('btnMIDI');
+    if (midiBtn){
+        midiBtn.disabled = true;
+        midiBtn.hidden = true;
+    }
+
+    const startBtn = document.getElementById('btnStart');
+    if (startBtn){
+        startBtn.disabled = true;
+        startBtn.hidden = true;
+    }
 }
 
 /* -------------------- FULLSCREEN -------------------- */
