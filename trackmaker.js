@@ -199,6 +199,8 @@ function selectMIDI() {
             updateStatus('MIDI loaded');
         }
     };
+    console.log(midiManager.notes.length);
+    console.log(midiManager.notes.slice(0,5));
 
     input.click();
 }
