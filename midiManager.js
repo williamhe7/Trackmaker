@@ -11,8 +11,6 @@ export class MidiManager {
         try {
             const arrayBuffer = await file.arrayBuffer();
             const midiData = MidiParser.parse(new Uint8Array(arrayBuffer));
-
-            console.log(midiData);
             
             this.notes = [];
             let currentTime = 0;
