@@ -81,34 +81,85 @@ function updateStatus(msg) {
 /* -------------------- CAMERA -------------------- */
 
 async function startWebcam() {
-    try {
-        updateStatus('Starting camera...');
 
+    const btn = document.getElementById('btnWebcam');
+    if (btn) btn.disabled = true;
+
+    try {
+
+        updateStatus('Requesting Selfie Camera...');
+
+        // Mobile: prefer front camera
         stream = await navigator.mediaDevices.getUserMedia({
             video: {
-                facingMode: 'environment',
+                facingMode: { exact: "user" },
                 width: { ideal: 1280 },
                 height: { ideal: 720 }
             }
         });
 
+        console.log("✅ Using front/selfie camera");
+
+    } catch (e) {
+
+        console.warn(
+            "Front camera unavailable, trying fallback...",
+            e
+        );
+
+        try {
+
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            });
+
+            console.log("✅ Using fallback camera");
+
+        } catch (fallbackError) {
+
+            console.error(fallbackError);
+
+            updateStatus(
+                '❌ Camera access denied or unavailable'
+            );
+
+            if (btn) btn.disabled = false;
+
+            return;
+        }
+    }
+
+    try {
+
         video = document.createElement('video');
         video.srcObject = stream;
         video.playsInline = true;
         video.muted = true;
+
         await video.play();
 
         isRunning = true;
 
-        document.getElementById('btnCalibrate').disabled = false;
+        document.getElementById(
+            'btnCalibrate'
+        ).disabled = false;
 
-        updateStatus('Camera active');
+        updateStatus('✅ Camera Active');
 
         loop();
 
-    } catch (e) {
-        console.error(e);
-        updateStatus('Camera failed');
+    } catch (err) {
+
+        console.error(err);
+
+        updateStatus(
+            '❌ Failed to start video stream'
+        );
+
+        if (btn) btn.disabled = false;
     }
 }
 
