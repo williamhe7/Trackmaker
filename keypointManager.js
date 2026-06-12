@@ -354,6 +354,11 @@ export class KeypointManager {
     
             this.scaled_height =
                 rotated.rows;
+
+            this.lastDrawInfo = {
+                pianoW: rotated.cols,
+                pianoH: rotated.rows
+            };
     
             roi.delete();
             image.delete();
@@ -362,11 +367,6 @@ export class KeypointManager {
             transformed.delete();
             warped.delete();
             src.delete();
-
-            this.lastDrawInfo = {
-                pianoW: rotated.cols,
-                pianoH: rotated.rows
-            };
     
             return outputCanvas;
     
