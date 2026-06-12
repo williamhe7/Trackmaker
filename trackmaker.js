@@ -12,6 +12,7 @@ let keypointManager, pianoManager, midiManager;
 let isRunning = false;
 let started = false;
 let isCalibrated = false;
+let isMidiEnabled = false;
 
 const MODEL_URL = 'https://williamhe7.github.io/trackmaker/best_v3.onnx';
 
@@ -19,6 +20,7 @@ const MODEL_URL = 'https://williamhe7.github.io/trackmaker/best_v3.onnx';
 
 async function initONNX() {
     updateStatus('Loading model...');
+
     try {
         session = await ort.InferenceSession.create(MODEL_URL, {
             executionProviders: ['wasm'],
@@ -27,6 +29,7 @@ async function initONNX() {
 
         updateStatus('Model loaded');
         return true;
+
     } catch (e) {
         console.error(e);
         updateStatus('Model failed to load');
@@ -36,8 +39,8 @@ async function initONNX() {
 
 export async function initTrackmaker() {
 
-    console.log("version 1.31")
-    
+    console.log("version 1.32");
+
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
 
@@ -55,9 +58,10 @@ export async function initTrackmaker() {
     updateStatus('Ready');
 }
 
+/* -------------------- CANVAS -------------------- */
+
 function resizeCanvas() {
     if (!canvas) return;
-
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 }
@@ -86,28 +90,20 @@ async function startWebcam() {
 
     try {
 
-        updateStatus('Requesting Selfie Camera...');
+        updateStatus('Requesting Camera...');
 
-        // Mobile: prefer front camera
         stream = await navigator.mediaDevices.getUserMedia({
             video: {
                 facingMode: "user",
-        
-                // IMPORTANT: request exact constraints first
                 width: { ideal: 1600, min: 1280 },
                 height: { ideal: 1200, min: 720 },
-        
                 aspectRatio: { ideal: 4 / 3 },
-        
-                // helps prevent “auto zoom framing” on some iPhones
                 resizeMode: "none"
             }
         });
+
         const track = stream.getVideoTracks()[0];
-        if (track.getCapabilities) {
-            console.log("Capabilities:", track.getCapabilities());
-        }
-        
+
         if (track.applyConstraints) {
             try {
                 await track.applyConstraints({
@@ -116,81 +112,37 @@ async function startWebcam() {
                     aspectRatio: 4 / 3
                 });
             } catch (e) {
-                console.log("applyConstraints failed (normal on iOS)", e);
+                console.log("applyConstraints failed (normal iOS)", e);
             }
         }
 
-        console.log("✅ Using front/selfie camera");
-
     } catch (e) {
-
-        console.warn(
-            "Front camera unavailable, trying fallback...",
-            e
-        );
-
-        try {
-
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
-            });
-
-            console.log("✅ Using fallback camera");
-
-        } catch (fallbackError) {
-
-            console.error(fallbackError);
-
-            updateStatus(
-                '❌ Camera access denied or unavailable'
-            );
-
-            if (btn) btn.disabled = false;
-
-            return;
-        }
-    }
-
-    try {
-
-        video = document.createElement('video');
-        video.srcObject = stream;
-        video.playsInline = true;
-        video.muted = true;
-
-        await video.play();
-
-        const settings = stream.getVideoTracks()[0].getSettings();
-        console.log("Camera settings:", settings);
-
-        isRunning = true;
-
-        document.getElementById(
-            'btnCalibrate'
-        ).disabled = false;
-
-        updateStatus('✅ Camera Active');
-
-        loop();
-
-    } catch (err) {
-
-        console.error(err);
-
-        updateStatus(
-            '❌ Failed to start video stream'
-        );
-
+        console.error(e);
+        updateStatus('Camera failed');
         if (btn) btn.disabled = false;
+        return;
     }
+
+    video = document.createElement('video');
+    video.srcObject = stream;
+    video.playsInline = true;
+    video.muted = true;
+
+    await video.play();
+
+    isRunning = true;
+
+    document.getElementById('btnCalibrate').disabled = false;
+
+    updateStatus('Camera Active');
+
+    loop();
 }
 
 /* -------------------- CALIBRATE -------------------- */
 
 async function calibrate() {
+
     if (!video || !session) return;
 
     updateStatus('Calibrating...');
@@ -207,52 +159,50 @@ async function calibrate() {
 
     pianoManager.initKeys();
 
+    // IMPORTANT: now we require user selection
     buildKeyOverlay();
 
     isCalibrated = true;
+    isMidiEnabled = false;
 
-    document.getElementById('btnMIDI').disabled = false;
-    document.getElementById('btnStart').disabled = false;
+    document.getElementById('btnMIDI').disabled = true;
+    document.getElementById('btnStart').disabled = true;
 
-    updateStatus(`Calibrated (${kps.length})`);
+    updateStatus(`Select Middle C (${kps.length} keys detected)`);
 }
 
 /* -------------------- MIDI -------------------- */
 
 function selectMIDI() {
 
-    console.log("Select MIDI clicked");
+    if (!isMidiEnabled) {
+        updateStatus("Select Middle C first");
+        return;
+    }
 
     const input = document.createElement("input");
-
     input.type = "file";
     input.accept = ".mid,.midi";
 
-    document.body.appendChild(input);
-
     input.onchange = async (e) => {
 
-        if (!e.target.files.length) {
-            console.log("No file selected");
-            return;
-        }
+        if (!e.target.files.length) return;
 
-        await midiManager.loadMIDI(
-            e.target.files[0]
-        );
+        await midiManager.loadMIDI(e.target.files[0]);
 
         updateStatus("MIDI loaded");
-
-        document.body.removeChild(input);
     };
 
     input.click();
 }
 
+/* -------------------- KEY OVERLAY -------------------- */
+
 function buildKeyOverlay() {
 
     const container = document.getElementById("key-overlay");
     container.innerHTML = "";
+    container.style.display = "block";
 
     const keys = pianoManager.all_keys;
 
@@ -264,65 +214,59 @@ function buildKeyOverlay() {
 
         btn.style.position = "absolute";
         btn.style.left = `${key.x}px`;
-        btn.style.top = `${canvas.height * 0.6}px`; // match piano area
+        btn.style.top = `${canvas.height * 0.6}px`;
         btn.style.width = `${key.width}px`;
         btn.style.height = `80px`;
 
-        btn.style.opacity = "0.4";
+        btn.style.opacity = "0.35";
         btn.style.fontSize = "10px";
 
-        btn.style.pointerEvents = "auto";
         btn.style.background = key.isBlack ? "#222" : "#ddd";
         btn.style.color = key.isBlack ? "#fff" : "#000";
         btn.style.border = "1px solid #444";
 
         btn.onclick = () => {
-            console.log("Calibrating on key:", key.signature);
 
             pianoManager.setMiddleC(key.signature);
 
-            container.innerHTML = ""; // remove overlay after calibration
+            container.innerHTML = "";
+            container.style.display = "none";
+
+            isMidiEnabled = true;
+
+            document.getElementById('btnMIDI').disabled = false;
+            document.getElementById('btnStart').disabled = false;
+
+            updateStatus("Ready (Middle C set)");
         };
 
         container.appendChild(btn);
     }
 }
 
+/* -------------------- PLAYBACK -------------------- */
 
 function startPlayback() {
-    
+
     started = true;
     midiManager.startTime = performance.now() / 1000;
+
     updateStatus('Playback started');
 
-    const webcamBtn = document.getElementById('btnWebcam');
-    if (webcamBtn){
-        webcamBtn.disabled = true;
-        webcamBtn.hidden = true;
-    }
-
-    const calibrateBtn = document.getElementById('btnCalibrate');
-    if (calibrateBtn){
-        calibrateBtn.disabled = true;
-        calibrateBtn.hidden = true;
-    }
-
-    const midiBtn = document.getElementById('btnMIDI');
-    if (midiBtn){
-        midiBtn.disabled = true;
-        midiBtn.hidden = true;
-    }
-
-    const startBtn = document.getElementById('btnStart');
-    if (startBtn){
-        startBtn.disabled = true;
-        startBtn.hidden = true;
-    }
+    ["btnWebcam","btnCalibrate","btnMIDI","btnStart"]
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.disabled = true;
+                el.hidden = true;
+            }
+        });
 }
 
 /* -------------------- FULLSCREEN -------------------- */
 
 function toggleFullscreen() {
+
     const el = document.getElementById('canvas-container');
 
     if (!document.fullscreenElement) {
@@ -332,9 +276,10 @@ function toggleFullscreen() {
     }
 }
 
-/* -------------------- MAIN LOOP (FPS STABLE) -------------------- */
+/* -------------------- LOOP -------------------- */
 
 function loop() {
+
     if (!isRunning) return;
 
     requestAnimationFrame(loop);
@@ -348,23 +293,14 @@ function loop() {
     }
 
     if (pianoCanvas) {
-    
-        const scaleX =
-            canvas.width / pianoCanvas.width;
-    
-        const scaleY =
-            (canvas.height * 0.5) /
-            pianoCanvas.height;
-    
-        const scale =
-            Math.min(scaleX, scaleY);
-    
-        const w =
-            pianoCanvas.width * scale;
-    
-        const h =
-            pianoCanvas.height * scale;
-    
+
+        const scaleX = canvas.width / pianoCanvas.width;
+        const scaleY = (canvas.height * 0.5) / pianoCanvas.height;
+        const scale = Math.min(scaleX, scaleY);
+
+        const w = pianoCanvas.width * scale;
+        const h = pianoCanvas.height * scale;
+
         ctx.drawImage(
             pianoCanvas,
             (canvas.width - w) / 2,
@@ -373,7 +309,7 @@ function loop() {
             h
         );
     } else {
-        // fallback camera view
+
         const vw = video.videoWidth || 1280;
         const vh = video.videoHeight || 720;
 
@@ -387,10 +323,15 @@ function loop() {
             w = h * r;
         }
 
-        ctx.drawImage(video, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+        ctx.drawImage(
+            video,
+            (canvas.width - w) / 2,
+            (canvas.height - h) / 2,
+            w,
+            h
+        );
     }
 
-    
     if (started && midiManager?.notes?.length) {
         const t = performance.now() / 1000;
         midiManager.drawVisualization(ctx, canvas.height, t - midiManager.startTime);
