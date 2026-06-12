@@ -33,15 +33,15 @@ export class PianoManager {
     ========================== */
 
     initKeys() {
-
+    
         this.initWKeys();
-
-        this.bkeys = [];
-        this.all_keys = [...this.wkeys];
-
+    
         this.middleCIndex = null;
         this.isCalibrated = false;
-
+    
+        this.bkeys = [];
+        this.all_keys = [...this.wkeys];
+    
         this.spawnMiddleCUI();
     }
 
@@ -165,45 +165,18 @@ export class PianoManager {
     ========================== */
 
     setMiddleC(index) {
-
-        console.log(
-            "Middle C set at index:",
-            index
-        );
-
+    
         this.middleCIndex = index;
-
-        try {
-
-            this.assignSignatures();
-
-            this.initBKeys();
-
-            this.isCalibrated = true;
-
-            if (this.overlay) {
-
-                this.overlay.innerHTML = "";
-
-                this.overlay.style.display =
-                    "none";
-            }
-
-            console.log(
-                "Calibration complete"
-            );
-
-            console.log(
-                "Total keys:",
-                this.all_keys.length
-            );
-
-        } catch (e) {
-
-            console.error(
-                "Middle C calibration failed",
-                e
-            );
+    
+        this.assignSignaturesFromMiddleC();
+    
+        this.initBKeys();
+    
+        this.isCalibrated = true;
+    
+        if (this.overlay) {
+            this.overlay.innerHTML = "";
+            this.overlay.style.display = "none";
         }
     }
 
