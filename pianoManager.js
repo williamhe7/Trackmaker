@@ -13,10 +13,6 @@ export class PianoManager {
             7: 42
         };
 
-        this.wkey_dict = [
-            "A","B","C","D","E","F","G"
-        ];
-
         this.wkeys = [];
         this.bkeys = [];
         this.all_keys = [];
@@ -33,15 +29,15 @@ export class PianoManager {
     ========================== */
 
     initKeys() {
-    
+
         this.initWKeys();
-    
+
         this.middleCIndex = null;
         this.isCalibrated = false;
-    
+
         this.bkeys = [];
         this.all_keys = [...this.wkeys];
-    
+
         this.spawnMiddleCUI();
     }
 
@@ -68,7 +64,6 @@ export class PianoManager {
 
             this.wkeys.push({
                 index: i,
-                name: this.wkey_dict[i % 7],
                 x: currentX,
                 width: keyWidth,
                 signature: 0,
@@ -80,7 +75,7 @@ export class PianoManager {
     }
 
     /* ==========================
-       MIDDLE C UI
+       MIDDLE C PICKER
     ========================== */
 
     spawnMiddleCUI() {
@@ -98,12 +93,6 @@ export class PianoManager {
         const numKeys =
             this.wkeys.length;
 
-        console.log(
-            "Spawning",
-            numKeys,
-            "buttons"
-        );
-
         for (let i = 0; i < numKeys; i++) {
 
             const btn =
@@ -120,11 +109,14 @@ export class PianoManager {
             btn.style.width =
                 `${100 / numKeys}%`;
 
-            btn.style.bottom = "0px";
+            btn.style.bottom =
+                "0px";
 
-            btn.style.height = "40%";
+            btn.style.height =
+                "40%";
 
-            btn.style.zIndex = "9999";
+            btn.style.zIndex =
+                "9999";
 
             btn.style.background =
                 "rgba(255,255,255,0.25)";
@@ -161,19 +153,24 @@ export class PianoManager {
     }
 
     /* ==========================
-       USER PICKS MIDDLE C
+       USER PICKED MIDDLE C
     ========================== */
 
     setMiddleC(index) {
-    
+
+        console.log(
+            "Middle C index =",
+            index
+        );
+
         this.middleCIndex = index;
-    
-        this.assignSignaturesFromMiddleC();
-    
+
+        this.assignSignatures();
+
         this.initBKeys();
-    
+
         this.isCalibrated = true;
-    
+
         if (this.overlay) {
             this.overlay.innerHTML = "";
             this.overlay.style.display = "none";
@@ -181,15 +178,13 @@ export class PianoManager {
     }
 
     /* ==========================
-       SIGNATURES
+       SIGNATURE ASSIGNMENT
     ========================== */
 
     assignSignatures() {
 
-        const midiNames = [
-            "C","C#","D","D#","E",
-            "F","F#","G","G#",
-            "A","A#","B"
+        const whiteOffsets = [
+            0, 2, 4, 5, 7, 9, 11
         ];
 
         for (
@@ -198,20 +193,26 @@ export class PianoManager {
             i++
         ) {
 
-            const semitoneOffset =
+            const relative =
                 i - this.middleCIndex;
 
-            this.wkeys[i].signature =
-                60 + semitoneOffset;
+            const octave =
+                Math.floor(relative / 7);
 
-            this.wkeys[i].name =
-                midiNames[
-                    (
-                        this.wkeys[i].signature %
-                        12
-                    + 12
-                    ) % 12
-                ];
+            let pos =
+                relative % 7;
+
+            if (pos < 0) {
+                pos += 7;
+            }
+
+            const midi =
+                60 +
+                octave * 12 +
+                whiteOffsets[pos];
+
+            this.wkeys[i].signature =
+                midi;
         }
     }
 
@@ -228,71 +229,76 @@ export class PianoManager {
             this.keypointManager.scaled_width /
             this.wkeys.length;
 
-        const blackOffsets = {
-            "C": 0.7,
-            "D": 0.7,
-            "F": 0.7,
-            "G": 0.7,
-            "A": 0.7
-        };
-
         for (
             let i = 0;
             i < this.wkeys.length;
             i++
         ) {
 
-            const w =
+            const white =
                 this.wkeys[i];
 
-            this.all_keys.push(w);
+            this.all_keys.push(
+                white
+            );
 
             const note =
                 this.getNoteName(
-                    w.signature
+                    white.signature
                 );
 
-            if (
+            const hasBlack =
                 note === "C" ||
                 note === "D" ||
                 note === "F" ||
                 note === "G" ||
-                note === "A"
-            ) {
+                note === "A";
 
-                const b =
-                {
-                    name:
-                        note + "#",
-
-                    signature:
-                        w.signature + 1,
-
-                    x:
-                        w.x +
-                        blackOffsets[note] *
-                        wkeyWidth,
-
-                    width:
-                        wkeyWidth * 0.5,
-
-                    isBlack:
-                        true
-                };
-
-                this.bkeys.push(b);
-                this.all_keys.push(b);
+            if (!hasBlack) {
+                continue;
             }
+
+            const black = {
+
+                name:
+                    note + "#",
+
+                signature:
+                    white.signature + 1,
+
+                x:
+                    white.x +
+                    wkeyWidth * 0.72,
+
+                width:
+                    wkeyWidth * 0.55,
+
+                isBlack:
+                    true
+            };
+
+            this.bkeys.push(
+                black
+            );
+
+            this.all_keys.push(
+                black
+            );
         }
 
         console.log(
-            "White keys:",
+            "White:",
             this.wkeys.length
         );
 
         console.log(
-            "Black keys:",
+            "Black:",
             this.bkeys.length
+        );
+
+        console.log(
+            "Total:",
+            this.all_keys.length
         );
     }
 
