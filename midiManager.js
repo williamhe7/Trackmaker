@@ -273,10 +273,14 @@ export class MidiManager {
         if (this.startTime === null || !this.pianoManager) return;
 
         const km = this.pianoManager.keypointManager;
-        const drawInfo = km.lastDrawInfo || { drawX: 0, scale: 1, pianoW: km.scaled_width };
+        const drawInfo = km.lastDrawInfo || { 
+            drawX: 0, 
+            scale: 1, 
+            pianoW: km.scaled_width 
+        };
 
-        const noteAreaTop = canvasHeight * 0.5;
-        const noteAreaH = canvasHeight * 0.5;
+        const noteAreaTop = 0;                    // Start from very top
+        const noteAreaHeight = canvasHeight * 0.5; // Top half of screen
 
         ctx.save();
 
@@ -284,17 +288,17 @@ export class MidiManager {
             const yHead = (currentTime - note.start) * this.avgSpeed;
             const yTop = yHead - note.length;
 
-            if (yHead < 0 || yTop > noteAreaH) continue;
+            if (yHead < 0 || yTop > noteAreaHeight) continue;
 
             const key = this.pianoManager.all_keys.find(k => k.signature === note.signature);
             if (!key) continue;
 
-            // Map internal key coordinates to screen coordinates
+            // Convert internal piano coordinates → screen coordinates
             const screenX = drawInfo.drawX + (key.x / drawInfo.pianoW) * (drawInfo.pianoW * drawInfo.scale);
             const screenWidth = (key.width / drawInfo.pianoW) * (drawInfo.pianoW * drawInfo.scale);
 
             const clampedTop = Math.max(0, yTop);
-            const clampedBottom = Math.min(noteAreaH, yHead);
+            const clampedBottom = Math.min(noteAreaHeight, yHead);
 
             // Falling note
             ctx.fillStyle = key.isBlack ? 'rgba(220, 50, 50, 0.95)' : 'rgba(255, 80, 80, 0.9)';
