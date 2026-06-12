@@ -254,69 +254,74 @@ function toggleFullscreen() {
 
 function loop() {
 
-    if (!isRunning) return;
-
-    requestAnimationFrame(loop);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    let pianoCanvas = null;
-
-    if (isCalibrated) {
-        pianoCanvas = keypointManager.transformImage(video);
-    }
-
-    if (pianoCanvas) {
-
-        const scaleX = canvas.width / pianoCanvas.width;
-        const scaleY = (canvas.height * 0.5) / pianoCanvas.height;
-        const scale = Math.min(scaleX, scaleY);
-
-        const w = pianoCanvas.width * scale;
-        const h = pianoCanvas.height * scale;
-
-        ctx.drawImage(
-            pianoCanvas,
-            (canvas.width - w) / 2,
-            canvas.height * 0.5,
-            w,
-            h
-        );
-
-    } else {
-
-        const vw = video.videoWidth || 1280;
-        const vh = video.videoHeight || 720;
-
-        const r = vw / vh;
-
-        let w = canvas.width;
-        let h = w / r;
-
-        if (h > canvas.height) {
-            h = canvas.height;
-            w = h * r;
-        }
-
-        ctx.drawImage(
-            video,
-            (canvas.width - w) / 2,
-            (canvas.height - h) / 2,
-            w,
-            h
-        );
-    }
-
-    if (started && midiManager?.notes?.length) {
-
-        const t = performance.now() / 1000;
-
-        midiManager.drawVisualization(
-            ctx,
-            canvas.height,
-            t - midiManager.startTime
-        );
-    }
+   if (!isRunning) return;
+   
+   requestAnimationFrame(loop);
+   
+   ctx.clearRect(0, 0, canvas.width, canvas.height);
+   
+   let pianoCanvas = null;
+   
+   if (isCalibrated) {
+     pianoCanvas = keypointManager.transformImage(video);
+   }
+   if (pianoCanvas) {
+       const pianoW = pianoCanvas.width;
+       const pianoH = pianoCanvas.height;
+   
+       const scaleX = canvas.width / pianoW;
+       const scaleY = (canvas.height * 0.5) / pianoH;
+       const scale = Math.min(scaleX, scaleY);
+   
+       const w = pianoW * scale;
+       const h = pianoH * scale;
+   
+       const drawX = Math.round((canvas.width - w) / 2);   // better centering
+       const drawY = Math.round(canvas.height * 0.5);
+   
+       ctx.drawImage(pianoCanvas, drawX, drawY, w, h);
+   
+       // Store drawing info for visualization alignment
+       keypointManager.lastDrawInfo = {
+           drawX: drawX,
+           drawY: drawY,
+           scale: scale,
+           pianoW: pianoW
+       };
+   } else {
+   
+     const vw = video.videoWidth || 1280;
+     const vh = video.videoHeight || 720;
+   
+     const r = vw / vh;
+   
+     let w = canvas.width;
+     let h = w / r;
+   
+     if (h > canvas.height) {
+         h = canvas.height;
+         w = h * r;
+     }
+   
+     ctx.drawImage(
+         video,
+         (canvas.width - w) / 2,
+         (canvas.height - h) / 2,
+         w,
+         h
+     );
+   }
+      
+   if (started && midiManager?.notes?.length) {
+   
+     const t = performance.now() / 1000;
+   
+     midiManager.drawVisualization(
+         ctx,
+         canvas.height,
+         t - midiManager.startTime
+     );
+   }
 }
 
 window.onload = initTrackmaker;
