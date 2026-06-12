@@ -92,8 +92,8 @@ async function startWebcam() {
         stream = await navigator.mediaDevices.getUserMedia({
             video: {
                 facingMode: { exact: "user" },
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
+                width: { ideal: 4896 },
+                height: { ideal: 3672 }
             }
         });
 
