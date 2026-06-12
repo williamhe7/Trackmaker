@@ -7,7 +7,7 @@ export class MidiManager {
         this.startTime = null;
     }
 
-     async loadMIDI(file) {
+    async loadMIDI(file) {
     
         try {
     
@@ -19,16 +19,78 @@ export class MidiManager {
     
             this.notes = [];
     
-            const tempo = 120;
             const ticksPerBeat =
                 midiData.timeDivision || 480;
     
+            // -------------------------
+            // Detect BPM from MIDI
+            // -------------------------
+    
+            let bpm = 120;
+    
+            outerLoop:
+            for (const track of midiData.track) {
+    
+                for (const event of track.event) {
+    
+                    if (
+                        event.metaType === 81 &&
+                        event.data
+                    ) {
+    
+                        if (
+                            typeof event.data === "number"
+                        ) {
+    
+                            bpm =
+                                60000000 /
+                                event.data;
+    
+                        } else if (
+                            Array.isArray(event.data) &&
+                            event.data.length === 3
+                        ) {
+    
+                            const microseconds =
+                                (event.data[0] << 16) |
+                                (event.data[1] << 8) |
+                                event.data[2];
+    
+                            bpm =
+                                60000000 /
+                                microseconds;
+                        }
+    
+                        console.log(
+                            "Detected BPM:",
+                            bpm
+                        );
+    
+                        break outerLoop;
+                    }
+                }
+            }
+    
             const secondsPerBeat =
-                60 / tempo;
+                60 / bpm;
+    
+            console.log(
+                "ticksPerBeat:",
+                ticksPerBeat
+            );
+    
+            console.log(
+                "secondsPerBeat:",
+                secondsPerBeat
+            );
     
             let totalEvents = 0;
             let noteOnCount = 0;
             let noteOffCount = 0;
+    
+            // -------------------------
+            // Parse notes
+            // -------------------------
     
             for (
                 let trackIndex = 0;
@@ -70,7 +132,10 @@ export class MidiManager {
                         continue;
                     }
     
-                    // Note On
+                    // -------------------------
+                    // NOTE ON
+                    // -------------------------
+    
                     if (
                         type === 9 &&
                         data.length >= 2 &&
@@ -88,7 +153,10 @@ export class MidiManager {
                         );
                     }
     
-                    // Note Off
+                    // -------------------------
+                    // NOTE OFF
+                    // -------------------------
+    
                     else if (
                         type === 8 ||
                         (
@@ -129,6 +197,7 @@ export class MidiManager {
                                 secondsPerBeat;
     
                             this.notes.push({
+    
                                 signature:
                                     pitch,
     
@@ -158,6 +227,39 @@ export class MidiManager {
                 (a, b) =>
                     a.start - b.start
             );
+    
+            console.log(
+                "Loaded notes:",
+                this.notes.length
+            );
+    
+            console.log(
+                "Note On events:",
+                noteOnCount
+            );
+    
+            console.log(
+                "Note Off events:",
+                noteOffCount
+            );
+    
+            if (
+                this.notes.length > 0
+            ) {
+    
+                console.log(
+                    "First note:",
+                    this.notes[0]
+                );
+    
+                console.log(
+                    "Last note:",
+                    this.notes[
+                        this.notes.length - 1
+                    ]
+                );
+            }
+    
         } catch (e) {
     
             console.error(
