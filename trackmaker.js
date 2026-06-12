@@ -13,9 +13,6 @@ let isRunning = false;
 let started = false;
 let isCalibrated = false;
 
-let layoutMode = "FULL_CAMERA"; 
-// FULL_CAMERA | SPLIT_VIEW
-
 const MODEL_URL = 'https://williamhe7.github.io/trackmaker/best_v3.onnx';
 
 /* -------------------- INIT -------------------- */
@@ -39,14 +36,16 @@ async function initONNX() {
 
 export async function initTrackmaker() {
 
-    console.log("version 1.4");
+    console.log("version 1.5 SAFE");
 
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
 
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
-    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 300));
+    window.addEventListener('orientationchange', () =>
+        setTimeout(resizeCanvas, 300)
+    );
 
     await initONNX();
 
@@ -89,7 +88,6 @@ async function startWebcam() {
     if (btn) btn.disabled = true;
 
     try {
-
         updateStatus('Requesting Camera...');
 
         stream = await navigator.mediaDevices.getUserMedia({
@@ -101,12 +99,8 @@ async function startWebcam() {
             }
         });
 
-        console.log("Camera active");
-
     } catch (e) {
-
         console.error(e);
-
         updateStatus('Camera failed');
         if (btn) btn.disabled = false;
         return;
@@ -147,7 +141,6 @@ async function calibrate() {
     keypointManager.compute_homography(kps);
 
     pianoManager.initKeys();
-
     isCalibrated = true;
 
     document.getElementById('btnMIDI').disabled = false;
@@ -183,7 +176,6 @@ function selectMIDI() {
 function startPlayback() {
 
     started = true;
-    layoutMode = "SPLIT_VIEW";
 
     midiManager.startTime = performance.now() / 1000;
 
@@ -210,6 +202,61 @@ function toggleFullscreen() {
 
 /* -------------------- MAIN LOOP -------------------- */
 
+function drawCamera() {
+
+    if (!video) return;
+
+    const vw = video.videoWidth || 1600;
+    const vh = video.videoHeight || 1200;
+
+    const scale = Math.max(
+        canvas.width / vw,
+        canvas.height / vh
+    );
+
+    const w = vw * scale;
+    const h = vh * scale;
+
+    ctx.drawImage(
+        video,
+        (canvas.width - w) / 2,
+        (canvas.height - h) / 2,
+        w,
+        h
+    );
+}
+
+function drawCalibratedCamera() {
+
+    if (!video || !isCalibrated || !keypointManager?.transformImage) {
+        drawCamera();
+        return;
+    }
+
+    const frame = keypointManager.transformImage(video);
+
+    if (!frame) {
+        drawCamera();
+        return;
+    }
+
+    const scale = Math.max(
+        canvas.width / frame.width,
+        canvas.height / frame.height
+    );
+
+    const w = frame.width * scale;
+    const h = frame.height * scale;
+
+    ctx.drawImage(
+        frame,
+        (canvas.width - w) / 2,
+        (canvas.height - h) / 2,
+        w,
+        h
+    );
+}
+
 function loop() {
 
     if (!isRunning) return;
@@ -218,66 +265,40 @@ function loop() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    let pianoCanvas = null;
+    /* ---------------- CAMERA ---------------- */
 
-    if (isCalibrated) {
-        pianoCanvas = keypointManager.transformImage(video);
-    }
+    if (!started) {
 
-    /* -------------------- CAMERA RENDER -------------------- */
+        // FULL SCREEN CAMERA MODE (IMPORTANT FIX)
+        drawCalibratedCamera();
 
-    if (pianoCanvas) {
+    } else {
 
-        if (layoutMode === "FULL_CAMERA") {
+        // SPLIT VIEW MODE
 
-            // FULL SCREEN CAMERA (IMPORTANT FIX)
-            const scale = Math.max(
-                canvas.width / pianoCanvas.width,
-                canvas.height / pianoCanvas.height
-            );
+        const mid = canvas.height * 0.5;
 
-            const w = pianoCanvas.width * scale;
-            const h = pianoCanvas.height * scale;
+        /* TOP: camera / transformed view */
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, canvas.width, mid);
+        ctx.clip();
 
-            ctx.drawImage(
-                pianoCanvas,
-                (canvas.width - w) / 2,
-                (canvas.height - h) / 2,
-                w,
-                h
-            );
+        drawCalibratedCamera();
 
-        } else {
+        ctx.restore();
 
-            // SPLIT VIEW (bottom half only)
-            const scaleX = canvas.width / pianoCanvas.width;
-            const scaleY = (canvas.height * 0.5) / pianoCanvas.height;
-            const scale = Math.min(scaleX, scaleY);
+        /* BOTTOM: MIDI */
+        if (midiManager?.notes?.length) {
 
-            const w = pianoCanvas.width * scale;
-            const h = pianoCanvas.height * scale;
+            const t = performance.now() / 1000;
 
-            ctx.drawImage(
-                pianoCanvas,
-                (canvas.width - w) / 2,
-                canvas.height * 0.5,
-                w,
-                h
+            midiManager.drawVisualization(
+                ctx,
+                canvas.height,
+                t - midiManager.startTime
             );
         }
-    }
-
-    /* -------------------- MIDI -------------------- */
-
-    if (started && midiManager?.notes?.length) {
-
-        const t = performance.now() / 1000;
-
-        midiManager.drawVisualization(
-            ctx,
-            canvas.height,
-            t - midiManager.startTime
-        );
     }
 }
 
