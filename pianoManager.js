@@ -114,31 +114,78 @@ export class PianoManager {
         STEP 1: UI SELECTION
     ----------------------------- */
     spawnMiddleCUI() {
+    
         if (!this.overlay) return;
-
+    
         this.overlay.innerHTML = "";
         this.overlay.style.display = "block";
-
-        for (let i = 0; i < this.wkeys.length; i++) {
+    
+        const numKeys = this.wkeys.length;
+    
+        for (let i = 0; i < numKeys; i++) {
+    
             const key = this.wkeys[i];
-
-            const btn = document.createElement("div");
-
-            btn.className = "piano-key-btn";
+    
+            const btn = document.createElement("button");
+    
+            btn.textContent =
+                key.name === "C"
+                    ? `C (${i})`
+                    : key.name;
+    
+            btn.style.position = "absolute";
+    
             btn.style.left =
-                (key.x / this.keypointManager.scaled_width * 100) + "%";
-
+                `${100 * i / numKeys}%`;
+    
             btn.style.width =
-                (key.width / this.keypointManager.scaled_width * 100) + "%";
-
-            btn.textContent = key.name;
-
-            btn.onclick = () => {
-                this.setMiddleC(i);
-            };
-
+                `${100 / numKeys}%`;
+    
+            btn.style.bottom = "0px";
+    
+            btn.style.height = "45%";
+    
+            btn.style.zIndex = "9999";
+    
+            btn.style.opacity = "0.5";
+    
+            btn.style.background =
+                "rgba(255,255,255,0.25)";
+    
+            btn.style.color = "white";
+    
+            btn.style.border =
+                "1px solid rgba(255,255,255,0.3)";
+    
+            btn.style.fontSize = "14px";
+    
+            btn.style.pointerEvents = "auto";
+    
+            btn.style.touchAction = "manipulation";
+    
+            btn.addEventListener(
+                "pointerdown",
+                (e) => {
+    
+                    e.preventDefault();
+    
+                    console.log(
+                        "Selected middle C:",
+                        i
+                    );
+    
+                    this.setMiddleC(i);
+                }
+            );
+    
             this.overlay.appendChild(btn);
         }
+    
+        console.log(
+            "Spawned",
+            numKeys,
+            "middle-C buttons"
+        );
     }
 
     /* -----------------------------
