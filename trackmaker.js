@@ -91,11 +91,34 @@ async function startWebcam() {
         // Mobile: prefer front camera
         stream = await navigator.mediaDevices.getUserMedia({
             video: {
-                facingMode: { exact: "user" },
-                width: { ideal: 1600 },
-                height: { ideal: 1200 }
+                facingMode: "user",
+        
+                // IMPORTANT: request exact constraints first
+                width: { ideal: 1600, min: 1280 },
+                height: { ideal: 1200, min: 720 },
+        
+                aspectRatio: { ideal: 4 / 3 },
+        
+                // helps prevent “auto zoom framing” on some iPhones
+                resizeMode: "none"
             }
         });
+        const track = stream.getVideoTracks()[0];
+        if (track.getCapabilities) {
+            console.log("Capabilities:", track.getCapabilities());
+        }
+        
+        if (track.applyConstraints) {
+            try {
+                await track.applyConstraints({
+                    width: 1600,
+                    height: 1200,
+                    aspectRatio: 4 / 3
+                });
+            } catch (e) {
+                console.log("applyConstraints failed (normal on iOS)", e);
+            }
+        }
 
         console.log("✅ Using front/selfie camera");
 
@@ -139,6 +162,9 @@ async function startWebcam() {
         video.muted = true;
 
         await video.play();
+
+        const settings = stream.getVideoTracks()[0].getSettings();
+        console.log("Camera settings:", settings);
 
         isRunning = true;
 
