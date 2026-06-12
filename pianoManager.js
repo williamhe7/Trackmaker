@@ -13,8 +13,6 @@ export class PianoManager {
 
         this.middleCIndex = null;
         this.isCalibrated = false;
-
-        this.overlay = document.getElementById("key-overlay");
     }
 
     initKeys() {
@@ -23,7 +21,8 @@ export class PianoManager {
         this.isCalibrated = false;
         this.bkeys = [];
         this.all_keys = [...this.wkeys];
-        this.spawnMiddleCUI();
+
+        this.showMiddleCInput();
     }
 
     initWKeys() {
@@ -45,57 +44,24 @@ export class PianoManager {
         }
     }
 
-    /* ==========================
-       MIDDLE C SELECTOR - FIXED POSITIONING
-    ========================== */
-    spawnMiddleCUI() {
-        if (!this.overlay) {
-            console.error("key-overlay not found");
-            return;
-        }
+    showMiddleCInput() {
+        const panel = document.getElementById('middle-c-panel');
+        const input = document.getElementById('middle-c-input');
+        const confirmBtn = document.getElementById('middle-c-confirm');
 
-        this.overlay.innerHTML = "";
-        this.overlay.style.display = "block";
+        if (!panel || !input || !confirmBtn) return;
 
-        const km = this.keypointManager;
-        const numKeys = this.wkeys.length;
-        const canvas = document.getElementById('canvas');
-        if (!canvas) return;
+        input.value = Math.floor(this.wkeys.length / 2); // sensible default
+        panel.style.display = 'flex';
 
-        // Match exactly how the piano is drawn in the main loop
-        const pianoW = km.scaled_width;
-        const pianoH = km.scaled_height;
-
-        const scaleX = canvas.width / pianoW;
-        const scaleY = (canvas.height * 0.5) / pianoH;
-        const scale = Math.min(scaleX, scaleY);
-
-        const drawnWidth = pianoW * scale;
-        const drawnHeight = pianoH * scale;
-
-        const leftOffset = (canvas.width - drawnWidth) / 2;
-        const topOffset = canvas.height * 0.5;
-
-        const keyWidth = drawnWidth / numKeys;
-
-        for (let i = 0; i < numKeys; i++) {
-            const btn = document.createElement("button");
-            btn.textContent = i.toString();
-            btn.className = "piano-key-btn";
-
-            btn.style.left = `${leftOffset + i * keyWidth}px`;
-            btn.style.width = `${keyWidth}px`;
-            btn.style.top = `${topOffset}px`;
-            btn.style.height = `${drawnHeight * 0.65}px`;   // covers most of the key
-
-            btn.addEventListener("pointerdown", (e) => {
-                e.preventDefault();
-                console.log("Selected middle C white key index:", i);
-                this.setMiddleC(i);
-            });
-
-            this.overlay.appendChild(btn);
-        }
+        confirmBtn.onclick = () => {
+            const index = parseInt(input.value);
+            if (isNaN(index) || index < 0 || index >= this.wkeys.length) {
+                alert(`Please enter a number between 0 and ${this.wkeys.length - 1}`);
+                return;
+            }
+            this.setMiddleC(index);
+        };
     }
 
     setMiddleC(index) {
@@ -106,17 +72,16 @@ export class PianoManager {
         this.initBKeys();
         this.isCalibrated = true;
 
-        if (this.overlay) {
-            this.overlay.innerHTML = "";
-            this.overlay.style.display = "none";
-        }
+        // Hide panel
+        const panel = document.getElementById('middle-c-panel');
+        if (panel) panel.style.display = 'none';
 
         // Enable MIDI and Start buttons
         document.getElementById('btnMIDI').disabled = false;
         document.getElementById('btnStart').disabled = false;
 
         document.getElementById('status').textContent = 
-            `Middle C set to white key ${index} • Ready to load MIDI`;
+            `Middle C set to index ${index} • ${this.all_keys.length} keys ready`;
     }
 
     assignSignatures() {
