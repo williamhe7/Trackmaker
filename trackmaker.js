@@ -39,7 +39,7 @@ async function initONNX() {
 
 export async function initTrackmaker() {
 
-    console.log("version 1.34");
+    console.log("version 1.35");
 
     canvas = document.getElementById('canvas');
     ctx = canvas.getContext('2d');
@@ -200,64 +200,74 @@ function selectMIDI() {
 
 function buildKeyOverlay() {
 
-    const container = document.getElementById("key-overlay");
+    const container =
+        document.getElementById("key-overlay");
+
     container.innerHTML = "";
 
-    const keys = pianoManager.all_keys;
+    const whiteKeys =
+        pianoManager.wkeys;
 
-    // count ONLY white keys for proper spacing
-    const whiteKeys = keys.filter(k => !k.isBlack);
-    const whiteKeyWidth = canvas.width / whiteKeys.length;
+    const whiteKeyWidth =
+        canvas.width / whiteKeys.length;
 
-    for (const key of keys) {
+    for (let i = 0; i < whiteKeys.length; i++) {
 
-        const btn = document.createElement("button");
-
-        btn.textContent = key.name;
+        const btn =
+            document.createElement("button");
 
         btn.style.position = "absolute";
 
-        // convert piano-space index → white-key space
-        const whiteIndex = whiteKeys.findIndex(k => k === key);
+        btn.style.left =
+            `${i * whiteKeyWidth}px`;
 
-        let x;
+        btn.style.bottom = "0px";
 
-        if (!key.isBlack) {
-            x = whiteIndex * whiteKeyWidth;
-        } else {
-            // black keys sit between whites → approximate center
-            const prevWhiteIndex = whiteKeys.findIndex(
-                (_, i) => whiteKeys[i + 1]?.x > key.x
-            );
+        btn.style.width =
+            `${whiteKeyWidth}px`;
 
-            x = (prevWhiteIndex + 0.65) * whiteKeyWidth;
-        }
+        btn.style.height =
+            "220px";
 
-        btn.style.left = `${x}px`;
+        btn.style.opacity = "0.35";
 
-        // IMPORTANT: piano is bottom half
-        btn.style.bottom = `0px`;
+        btn.style.background =
+            "rgba(255,255,255,0.4)";
 
-        btn.style.width = key.isBlack
-            ? `${whiteKeyWidth * 0.6}px`
-            : `${whiteKeyWidth}px`;
+        btn.style.border =
+            "1px solid rgba(0,0,0,0.4)";
 
-        btn.style.height = key.isBlack ? `140px` : `220px`;
+        btn.style.color =
+            "transparent";
 
-        btn.style.opacity = "0.4";
-        btn.style.fontSize = "10px";
-        btn.style.border = "1px solid #444";
+        btn.style.zIndex = "1000";
 
-        btn.style.background = key.isBlack ? "#111" : "#ddd";
-        btn.style.color = key.isBlack ? "#fff" : "#000";
+        btn.style.pointerEvents = "auto";
 
         btn.onclick = () => {
 
-            console.log("Selected middle C reference:", key.signature);
+            console.log(
+                "Selected middle C index:",
+                i
+            );
 
-            pianoManager.setMiddleC?.(key.signature);
+            pianoManager.setMiddleC(i);
 
             container.innerHTML = "";
+
+            isMidiEnabled = true;
+
+            document.getElementById(
+                "btnMIDI"
+            ).disabled = false;
+
+            document.getElementById(
+                "btnStart"
+            ).disabled = false;
+
+            updateStatus(
+                "Middle C selected"
+            );
         };
 
         container.appendChild(btn);
